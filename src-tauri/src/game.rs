@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -23,7 +22,6 @@ const MAX_SPEED: f32 = 900.0;
 const MIN_SPEED: f32 = 160.0;
 const WALL_REST: f32 = 0.88;
 const FRICTION: f32 = 0.22;
-const HISTORY_MS: u64 = 350; // puck history depth for rewind
 
 // ── Public state managed by Tauri ────────────────────────────────────────────
 pub struct GameEngine {
@@ -165,8 +163,9 @@ struct GameState {
     client_paddle:   Paddle,
     score:           [u32; 2],
 
-    target_puck:     Puck,       // client: last authoritative puck from host
-    target_opponent: [f32; 2],   // both: last received opponent paddle pos
+    host_owns_puck:  bool,      // split-auth: true=host authoritative, false=client
+    target_puck:     Puck,      // last puck state received from the authoritative peer
+    target_opponent: [f32; 2],  // last received opponent paddle pos
 
     wall_flash:      f32,
     goal_flash:      f32,
@@ -179,14 +178,11 @@ struct GameState {
     is_host:         bool,
     is_single:       bool,
 
-    // RTT / host-authoritative networking
+    // RTT measurement (ts / echo_ts ping-pong)
     start_instant:   Instant,
-    puck_history:    VecDeque<(u64, Puck)>, // host: ring buffer for rewind
-    rtt_ms:          f32,                   // client: smoothed round-trip time
-    lag_ms:          u32,                   // client: one-way lag estimate (rtt/2)
-    hit_frames:      u8,                    // client: frames left to broadcast a hit
-    last_client_ts:  u64,                   // host: last ts received from client (for echo)
-    last_hit_ms:     u64,                   // host: time of last rewind hit (dedup)
+    rtt_ms:          f32,
+    lag_ms:          u32,
+    last_client_ts:  u64,
 }
 
 impl GameState {
@@ -197,18 +193,16 @@ impl GameState {
             host_paddle:     Paddle{ x:TW/2.0, y:yh, pvx:0.0, pvy:0.0 },
             client_paddle:   Paddle{ x:TW/2.0, y:yc, pvx:0.0, pvy:0.0 },
             score:           [0, 0],
+            host_owns_puck:  true,
             target_puck:     Puck  { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 },
             target_opponent: if is_host { [TW/2.0, yc] } else { [TW/2.0, yh] },
             wall_flash:0.0, goal_flash:0.0, score_flash:[0.0,0.0],
             hit:0, wall_hit:0, goal_scored:0, countdown: 3.0,
             is_host, is_single,
             start_instant:  Instant::now(),
-            puck_history:   VecDeque::new(),
             rtt_ms:         0.0,
             lag_ms:         0,
-            hit_frames:     0,
             last_client_ts: 0,
-            last_hit_ms:    0,
         }
     }
 
@@ -218,40 +212,24 @@ impl GameState {
 
     fn reset_puck(&mut self) {
         self.puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
+        self.host_owns_puck = true; // host always gets serve after a goal
     }
 
-    /// Host: check if client paddle would have hit the puck `lag_ms` ago;
-    /// if so, apply the velocity impulse to the current puck.
-    fn apply_rewind_hit(&mut self, lag_ms: u32) {
-        if self.puck_history.is_empty() { return; }
-        let now = self.now_ms();
-        let target_t = now.saturating_sub(lag_ms as u64);
-
-        // Find closest snapshot
-        let hist = self.puck_history.iter()
-            .min_by_key(|(t, _)| ((*t as i64) - target_t as i64).abs())
-            .map(|(_, p)| p.clone())
-            .unwrap_or_else(|| self.puck.clone());
-
-        let orig_vx = hist.vx;
-        let orig_vy = hist.vy;
-        let mut test = hist;
-        let cp = self.client_paddle.clone();
-
-        if collide_paddle_puck(&mut test, &cp) {
-            // Apply the velocity impulse to the current live puck
-            self.puck.vx += test.vx - orig_vx;
-            self.puck.vy += test.vy - orig_vy;
-            let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if cs > 0.1 && cs < MIN_SPEED {
-                self.puck.vx = self.puck.vx/cs*MIN_SPEED;
-                self.puck.vy = self.puck.vy/cs*MIN_SPEED;
-            } else if cs > MAX_SPEED {
-                self.puck.vx = self.puck.vx/cs*MAX_SPEED;
-                self.puck.vy = self.puck.vy/cs*MAX_SPEED;
-            }
-            self.hit = 1;
+    /// Update split authority with ±80px hysteresis at midline.
+    fn update_authority(&mut self) {
+        let mid  = TH / 2.0;
+        let hyst = 80.0;
+        if self.host_owns_puck {
+            if self.puck.y < mid - hyst { self.host_owns_puck = false; }
+        } else {
+            if self.puck.y >= mid + hyst { self.host_owns_puck = true; }
         }
+    }
+
+    /// Am I the authoritative physics owner right now?
+    fn am_auth(&self) -> bool {
+        if self.is_single { return true; }
+        (self.is_host && self.host_owns_puck) || (!self.is_host && !self.host_owns_puck)
     }
 
     fn update(&mut self, dt: f32, ptr: [f32; 2]) {
@@ -298,13 +276,16 @@ impl GameState {
         }
 
         // ── Puck ──────────────────────────────────────────────────────────────
-        if self.countdown > 0.0 && !self.is_host && !self.is_single {
-            // Client during countdown: freeze puck, blend toward host center
+        self.update_authority();
+        let am_auth = self.am_auth();
+
+        if self.countdown > 0.0 && !am_auth {
+            // Non-auth during countdown: freeze local puck, blend toward peer state
             self.puck.vx = 0.0; self.puck.vy = 0.0;
             self.puck.x += (self.target_puck.x - self.puck.x) * 0.3;
             self.puck.y += (self.target_puck.y - self.puck.y) * 0.3;
-        } else if self.is_host || self.is_single {
-            // ── HOST: authoritative physics ───────────────────────────────────
+        } else if am_auth {
+            // ── AUTHORITATIVE: run full physics ───────────────────────────────
             if self.countdown == 0.0 {
                 let hp = self.host_paddle.clone();
                 let cp = self.client_paddle.clone();
@@ -325,40 +306,25 @@ impl GameState {
                     self.reset_puck();
                     self.countdown = 2.5;
                 }
-
-                // Save to history for rewind (only when playing)
-                let now = self.now_ms();
-                self.puck_history.push_back((now, self.puck.clone()));
-                while self.puck_history.front()
-                    .map_or(false, |(t,_)| now.saturating_sub(*t) > HISTORY_MS)
-                {
-                    self.puck_history.pop_front();
-                }
             }
         } else {
-            // ── CLIENT: local prediction + correction ─────────────────────────
-            if self.hit_frames > 0 { self.hit_frames -= 1; }
-
+            // ── NON-AUTHORITATIVE: local prediction + correction ──────────────
             let hp = self.host_paddle.clone();
             let cp = self.client_paddle.clone();
-            let (wh, ph, _goal) = run_puck_physics(&mut self.puck, dt, &hp, &cp);
+            let (wh, _ph, _goal) = run_puck_physics(&mut self.puck, dt, &hp, &cp);
             if wh { self.wall_hit = 1; }
-            if ph {
-                self.hit = 1;
-                if self.hit_frames == 0 { self.hit_frames = 3; } // broadcast for 3 frames
-            }
 
-            // Local goal reset — don't score (host is authoritative for score)
+            // Local goal snap (no scoring — auth side handles score)
             if self.puck.y < -20.0 || self.puck.y > TH + 20.0 {
-                self.reset_puck();
+                self.puck.vx = 0.0; self.puck.vy = 0.0;
+                self.puck.x = TW/2.0; self.puck.y = TH/2.0;
             }
 
-            // Correct toward host's authoritative state
+            // Correct toward peer's authoritative puck state
             let ex = self.target_puck.x - self.puck.x;
             let ey = self.target_puck.y - self.puck.y;
             let err = (ex*ex + ey*ey).sqrt();
 
-            // Snap if: peer reset to center, large error, or puck just started moving
             let peer_reset = (self.target_puck.x - TW/2.0).abs() < 10.0
                 && (self.target_puck.y - TH/2.0).abs() < 10.0
                 && self.target_puck.vx.abs() < 1.0
@@ -405,46 +371,62 @@ impl GameState {
     fn net_msg(&self) -> Option<String> {
         if self.is_single { return None; }
         let now = self.now_ms();
+        let am_auth = self.am_auth();
         if self.is_host {
-            Some(serde_json::json!({
+            let mut msg = serde_json::json!({
                 "type":       "state",
                 "hostPaddle": [self.host_paddle.x, self.host_paddle.y],
-                "puck":       [self.puck.x, self.puck.y],
-                "vel":        [self.puck.vx, self.puck.vy],
+                "auth":       am_auth,
                 "score":      self.score,
                 "echo_ts":    self.last_client_ts,
-            }).to_string())
+            });
+            if am_auth {
+                msg["puck"] = serde_json::json!([self.puck.x, self.puck.y]);
+                msg["vel"]  = serde_json::json!([self.puck.vx, self.puck.vy]);
+            }
+            Some(msg.to_string())
         } else {
-            Some(serde_json::json!({
-                "type": "input",
-                "pos":  [self.client_paddle.x, self.client_paddle.y],
-                "ts":   now,
-                "lag":  self.lag_ms,
-                "hit":  self.hit_frames > 0,
-            }).to_string())
+            let mut msg = serde_json::json!({
+                "type":  "input",
+                "pos":   [self.client_paddle.x, self.client_paddle.y],
+                "auth":  am_auth,
+                "score": self.score,
+                "ts":    now,
+            });
+            if am_auth {
+                msg["puck"] = serde_json::json!([self.puck.x, self.puck.y]);
+                msg["vel"]  = serde_json::json!([self.puck.vx, self.puck.vy]);
+            }
+            Some(msg.to_string())
         }
     }
 
     fn apply_net(&mut self, msg: &str) {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else { return };
+        let peer_auth = v["auth"].as_bool().unwrap_or(false);
 
         if self.is_host && v["type"] == "input" {
             if let Some(pos) = v["pos"].as_array() {
-                let nx = pos[0].as_f64().unwrap_or(0.0) as f32;
-                let ny = pos[1].as_f64().unwrap_or(0.0) as f32;
-                self.target_opponent = [nx, ny];
+                self.target_opponent = [
+                    pos[0].as_f64().unwrap_or(0.0) as f32,
+                    pos[1].as_f64().unwrap_or(0.0) as f32,
+                ];
             }
-            // Echo timestamp back to client
-            if let Some(ts) = v["ts"].as_u64() {
-                self.last_client_ts = ts;
-            }
-            // Rewind hit — deduplicated with 150ms cooldown
-            if v["hit"].as_bool().unwrap_or(false) {
-                let now = self.now_ms();
-                if now.saturating_sub(self.last_hit_ms) > 150 {
-                    let lag = v["lag"].as_u64().unwrap_or(50) as u32;
-                    self.apply_rewind_hit(lag);
-                    self.last_hit_ms = now;
+            if let Some(ts) = v["ts"].as_u64() { self.last_client_ts = ts; }
+            // Accept client puck state when client is authoritative
+            if peer_auth {
+                if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
+                    self.target_puck = Puck {
+                        x:  p[0].as_f64().unwrap_or(0.0) as f32,
+                        y:  p[1].as_f64().unwrap_or(0.0) as f32,
+                        vx: vel[0].as_f64().unwrap_or(0.0) as f32,
+                        vy: vel[1].as_f64().unwrap_or(0.0) as f32,
+                    };
+                }
+                // Accept client's score (they scored on their half)
+                if let Some(s) = v["score"].as_array() {
+                    self.score[0] = self.score[0].max(s[0].as_u64().unwrap_or(0) as u32);
+                    self.score[1] = self.score[1].max(s[1].as_u64().unwrap_or(0) as u32);
                 }
             }
         } else if !self.is_host && v["type"] == "state" {
@@ -454,21 +436,23 @@ impl GameState {
                     hp[1].as_f64().unwrap_or(0.0) as f32,
                 ];
             }
-            if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                self.target_puck = Puck {
-                    x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                    y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                    vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                    vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                };
+            // Accept host puck state when host is authoritative
+            if peer_auth {
+                if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
+                    self.target_puck = Puck {
+                        x:  p[0].as_f64().unwrap_or(0.0) as f32,
+                        y:  p[1].as_f64().unwrap_or(0.0) as f32,
+                        vx: vel[0].as_f64().unwrap_or(0.0) as f32,
+                        vy: vel[1].as_f64().unwrap_or(0.0) as f32,
+                    };
+                }
             }
+            // Always accept host score (take max to avoid going backwards)
             if let Some(s) = v["score"].as_array() {
-                self.score = [
-                    s[0].as_u64().unwrap_or(0) as u32,
-                    s[1].as_u64().unwrap_or(0) as u32,
-                ];
+                self.score[0] = self.score[0].max(s[0].as_u64().unwrap_or(0) as u32);
+                self.score[1] = self.score[1].max(s[1].as_u64().unwrap_or(0) as u32);
             }
-            // RTT measurement: echo_ts is the ts we sent, now echoed back
+            // RTT measurement
             if let Some(echo_ts) = v["echo_ts"].as_u64() {
                 if echo_ts > 0 {
                     let now = self.now_ms();
