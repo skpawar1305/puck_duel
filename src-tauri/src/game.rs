@@ -308,19 +308,13 @@ impl GameState {
                 }
             }
         } else {
-            // ── NON-AUTHORITATIVE: local prediction + correction ──────────────
-            let hp = self.host_paddle.clone();
-            let cp = self.client_paddle.clone();
-            let (wh, _ph, _goal) = run_puck_physics(&mut self.puck, dt, &hp, &cp);
-            if wh { self.wall_hit = 1; }
+            // ── NON-AUTHORITATIVE: dead-reckoning + correction ────────────────
+            // Do NOT run local physics — it diverges since we lack exact opponent paddle state.
+            // Instead: linear extrapolation, then blend toward the authoritative state.
+            self.puck.x += self.puck.vx * dt;
+            self.puck.y += self.puck.vy * dt;
+            self.puck.x = self.puck.x.clamp(PR, TW - PR);
 
-            // Local goal snap (no scoring — auth side handles score)
-            if self.puck.y < -20.0 || self.puck.y > TH + 20.0 {
-                self.puck.vx = 0.0; self.puck.vy = 0.0;
-                self.puck.x = TW/2.0; self.puck.y = TH/2.0;
-            }
-
-            // Correct toward peer's authoritative puck state
             let ex = self.target_puck.x - self.puck.x;
             let ey = self.target_puck.y - self.puck.y;
             let err = (ex*ex + ey*ey).sqrt();
@@ -329,17 +323,15 @@ impl GameState {
                 && (self.target_puck.y - TH/2.0).abs() < 10.0
                 && self.target_puck.vx.abs() < 1.0
                 && self.target_puck.vy.abs() < 1.0;
-            let just_started = self.puck.vx.abs() < 1.0 && self.puck.vy.abs() < 1.0
-                && (self.target_puck.vx.abs() > 50.0 || self.target_puck.vy.abs() > 50.0);
 
-            if peer_reset || err > 150.0 || just_started {
+            if peer_reset || err > 120.0 {
                 self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
                 self.puck.vx = self.target_puck.vx;  self.puck.vy = self.target_puck.vy;
             } else if err > 2.0 {
-                self.puck.x  += ex * 0.15;
-                self.puck.y  += ey * 0.15;
-                self.puck.vx += (self.target_puck.vx - self.puck.vx) * 0.20;
-                self.puck.vy += (self.target_puck.vy - self.puck.vy) * 0.20;
+                self.puck.x  += ex * 0.30;
+                self.puck.y  += ey * 0.30;
+                self.puck.vx += (self.target_puck.vx - self.puck.vx) * 0.30;
+                self.puck.vy += (self.target_puck.vy - self.puck.vy) * 0.30;
             }
         }
 
@@ -413,6 +405,8 @@ impl GameState {
                 ];
             }
             if let Some(ts) = v["ts"].as_u64() { self.last_client_ts = ts; }
+            // Sync authority from client's perspective
+            if peer_auth { self.host_owns_puck = false; }
             // Accept client puck state when client is authoritative
             if peer_auth {
                 if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
@@ -436,6 +430,8 @@ impl GameState {
                     hp[1].as_f64().unwrap_or(0.0) as f32,
                 ];
             }
+            // Sync authority from host's perspective
+            if peer_auth { self.host_owns_puck = true; }
             // Accept host puck state when host is authoritative
             if peer_auth {
                 if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
