@@ -6,7 +6,11 @@ use tauri::State;
 use crate::udp_server::UdpState;
 use crate::relay::RelayState;
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Simulated network conditions (LAN testing) ───────────────────────────────
+const SIM_LAG_MS: u64  = 100;
+const SIM_LOSS_PCT: u64 = 3; // out of 100
+
+
 const TW: f32 = 360.0;
 const TH: f32 = 640.0;
 const PR: f32 = 20.0;
@@ -145,9 +149,18 @@ impl GameState {
 
     fn auth(&self) -> bool {
         if self.is_single { return true; }
-        // Use peer's last reported puck y — both players flip auth at the same moment
-        if self.is_host { self.target_puck.y >= TH / 2.0 }
-        else            { self.target_puck.y <  TH / 2.0 }
+        // Hysteresis: once you have authority, keep it 80px past midline into
+        // opponent's half before releasing. Gain it only 80px into your own half.
+        // This reduces handoff frequency and gives the new owner a clean momentum snapshot.
+        const HYST: f32 = 80.0;
+        let y = self.target_puck.y;
+        if self.is_host {
+            if self.prev_auth { y >= TH / 2.0 - HYST } // hold until well into client half
+            else              { y >= TH / 2.0 + HYST } // gain only when clearly in host half
+        } else {
+            if self.prev_auth { y <  TH / 2.0 + HYST } // hold until well into host half
+            else              { y <  TH / 2.0 - HYST } // gain only when clearly in client half
+        }
     }
 
     fn reset_puck(&mut self) {
@@ -193,8 +206,8 @@ impl GameState {
         } else {
             let op = if self.is_host { &mut self.client_paddle } else { &mut self.host_paddle };
             let (opx, opy) = (op.x, op.y);
-            op.x += (self.target_opponent[0] - op.x) * 0.85;
-            op.y += (self.target_opponent[1] - op.y) * 0.85;
+            op.x += (self.target_opponent[0] - op.x) * 0.25;
+            op.y += (self.target_opponent[1] - op.y) * 0.25;
             op.pvx = (op.x - opx) / dt;
             op.pvy = (op.y - opy) / dt;
         }
@@ -283,18 +296,30 @@ impl GameState {
                 if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; }
                 else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; }
             }
+            // Puck passed a goal — reset locally so it doesn't fly off screen
+            // while waiting for the authoritative reset message (up to 100ms away)
+            if self.puck.y < -20.0 || self.puck.y > TH + 20.0 {
+                self.reset_puck();
+            }
 
             // Blend toward authoritative peer state
             let ex = self.target_puck.x - self.puck.x;
             let ey = self.target_puck.y - self.puck.y;
             let err = (ex*ex + ey*ey).sqrt();
-            if err > 120.0 {
+
+            // If peer already reset puck to center (after goal), snap immediately
+            // rather than dead-reckoning the puck flying off screen for 100ms
+            let peer_reset = (self.target_puck.x - TW/2.0).abs() < 10.0
+                && (self.target_puck.y - TH/2.0).abs() < 10.0
+                && self.target_puck.vx.abs() < 1.0
+                && self.target_puck.vy.abs() < 1.0;
+            if peer_reset || err > 120.0 {
                 self.puck.x=self.target_puck.x; self.puck.y=self.target_puck.y;
                 self.puck.vx=self.target_puck.vx; self.puck.vy=self.target_puck.vy;
             } else if err > 1.0 {
-                self.puck.x += ex*0.12; self.puck.y += ey*0.12;
-                self.puck.vx += (self.target_puck.vx - self.puck.vx)*0.18;
-                self.puck.vy += (self.target_puck.vy - self.puck.vy)*0.18;
+                self.puck.x += ex*0.28; self.puck.y += ey*0.28;
+                self.puck.vx += (self.target_puck.vx - self.puck.vx)*0.40;
+                self.puck.vy += (self.target_puck.vy - self.puck.vy)*0.40;
             }
         }
 
@@ -463,16 +488,29 @@ pub async fn start_game(
                 if let Some(ref rtx) = relay_write_tx {
                     let _ = rtx.send(msg);
                 } else {
-                    let bytes = msg.as_bytes();
-                    if is_host {
-                        let addrs: Vec<_> = clients_arc.lock().unwrap().keys().cloned().collect();
-                        if let Some(sock) = &host_sock {
-                            for addr in addrs {
-                                let _ = sock.send_to(bytes, addr).await;
+                    // Simulate packet loss
+                    let ns = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .subsec_nanos() as u64;
+                    if ns % 100 >= SIM_LOSS_PCT {
+                        let bytes = msg.into_bytes();
+                        if is_host {
+                            let addrs: Vec<_> = clients_arc.lock().unwrap().keys().cloned().collect();
+                            if let Some(sock) = host_sock.clone() {
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(SIM_LAG_MS)).await;
+                                    for addr in addrs {
+                                        let _ = sock.send_to(&bytes, addr).await;
+                                    }
+                                });
                             }
+                        } else if let (Some(sock), Some(addr)) = (client_sock.clone(), client_addr) {
+                            tokio::spawn(async move {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(SIM_LAG_MS)).await;
+                                let _ = sock.send_to(&bytes, addr).await;
+                            });
                         }
-                    } else if let (Some(sock), Some(addr)) = (&client_sock, client_addr) {
-                        let _ = sock.send_to(bytes, addr).await;
                     }
                 }
             }

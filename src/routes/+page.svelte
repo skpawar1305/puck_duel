@@ -116,11 +116,13 @@
   // Once host receives an event, it switches screen
   let unlisten: UnlistenFn | null = null;
   let unlistenRelay: UnlistenFn | null = null;
+  let clientConnected = $state(false);
+
   onMount(async () => {
     unlisten = await listen<[string, string]>("udp-msg-received", (event) => {
-      // If we are Host waiting on QR Code screen, any ping payload means client joined
+      // If we are Host waiting on QR Code screen, any payload means client joined
       if (isHost && screen === "host") {
-        flushSync(() => { screen = "game"; });
+        clientConnected = true;
       }
     });
     unlistenRelay = await listen("relay-peer-connected", () => {
