@@ -15,7 +15,7 @@ val tauriProperties = Properties().apply {
 
 android {
     compileSdk = 36
-    namespace = "com.skpawar1305.airhockey"
+    namespace = "com.dano.puckduel"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.dano.puckduel"

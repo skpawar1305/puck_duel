@@ -311,9 +311,9 @@
                score:[0,0], wall_flash:0, goal_flash:0, score_flash:[0,0], hit:0, wall_hit:0, goal_scored:0, countdown:3 };
         const ch = new Channel<RS>();
         ch.onmessage = (state) => {
-            if (state.hit) { if (!muted) playHit(); }
-            if (state.wall_hit) { if (!muted) playWall(); }
-            if (state.goal_scored) { if (!muted) playGoal(); }
+            if (state.hit) { if (!muted) playHit(); navigator.vibrate?.(12); }
+            if (state.wall_hit) { if (!muted) playWall(); navigator.vibrate?.(6); }
+            if (state.goal_scored) { if (!muted) playGoal(); navigator.vibrate?.([40, 30, 40]); }
             rs = state;
             if (!gameOver && (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)) {
                 gameOver = true;
@@ -372,9 +372,9 @@
         // Channel: Rust pushes RenderState here every ~16ms
         const ch = new Channel<RS>();
         ch.onmessage = (state) => {
-            if (state.hit) { if (!muted) playHit(); }
-            if (state.wall_hit) { if (!muted) playWall(); }
-            if (state.goal_scored) { if (!muted) playGoal(); }
+            if (state.hit) { if (!muted) playHit(); navigator.vibrate?.(12); }
+            if (state.wall_hit) { if (!muted) playWall(); navigator.vibrate?.(6); }
+            if (state.goal_scored) { if (!muted) playGoal(); navigator.vibrate?.([40, 30, 40]); }
             rs = state;
             if (!gameOver && (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)) {
                 gameOver = true;
