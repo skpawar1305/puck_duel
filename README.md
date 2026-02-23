@@ -61,7 +61,7 @@ npm run tauri dev
 
 ## Privacy Policy
 
-[Privacy Policy](https://skpawar1305.github.io/duelpuck/privacy_policy.html) — PuckDuel collects no personal data.
+[Privacy Policy](https://skpawar1305.github.io/puck_duel/privacy_policy.html) — PuckDuel collects no personal data.
 
 ## License
 
