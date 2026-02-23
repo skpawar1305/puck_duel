@@ -269,28 +269,28 @@
             opIdx = isHost ? 1 : 0;
         const myCol = isHost ? "#60a5fa" : "#34d399";
         const opCol = isHost ? "#34d399" : "#60a5fa";
-        ctx.textAlign = "center";
 
-        const opSz = 28 + rs.score_flash[opIdx] * 20;
+        const opSz = 72 + rs.score_flash[opIdx] * 28;
         ctx.font = `900 ${opSz}px system-ui`;
-        ctx.textBaseline = "top";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
         if (rs.score_flash[opIdx] > 0) {
             ctx.shadowColor = opCol;
-            ctx.shadowBlur = 22;
+            ctx.shadowBlur = 28;
         }
         ctx.fillStyle = `rgba(${isHost ? "52,211,153" : "96,165,250"},${0.45 + rs.score_flash[opIdx] * 0.55})`;
-        ctx.fillText(String(rs.score[opIdx]), cw / 2, 14);
+        ctx.fillText(String(rs.score[opIdx]), 20, ch / 2 - 8);
         ctx.shadowBlur = 0;
 
-        const mySz = 28 + rs.score_flash[myIdx] * 20;
+        const mySz = 72 + rs.score_flash[myIdx] * 28;
         ctx.font = `900 ${mySz}px system-ui`;
-        ctx.textBaseline = "bottom";
+        ctx.textBaseline = "top";
         if (rs.score_flash[myIdx] > 0) {
             ctx.shadowColor = myCol;
-            ctx.shadowBlur = 22;
+            ctx.shadowBlur = 28;
         }
         ctx.fillStyle = `rgba(${isHost ? "96,165,250" : "52,211,153"},${0.8 + rs.score_flash[myIdx] * 0.2})`;
-        ctx.fillText(String(rs.score[myIdx]), cw / 2, ch - 14);
+        ctx.fillText(String(rs.score[myIdx]), 20, ch / 2 + 8);
         ctx.shadowBlur = 0;
 
         if (rs.countdown > 0) {
