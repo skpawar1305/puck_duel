@@ -12,19 +12,21 @@
   let isSinglePlayer = $state(false);
 
   // Network State
-  let localIp = $state("");
-  let qrCodeDataUrl = $state("");
+  let qrCodes = $state<{ ip: string; url: string }[]>([]);
   let remoteServerIp = $state("");
 
   async function startHost() {
     initAudio();
     isHost = true;
     try {
-      const ip = (await invoke("get_local_ip")) as string;
-      localIp = ip;
-      const url = `${ip}`;
+      const ips = (await invoke("get_local_ips")) as string[];
 
-      qrCodeDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
+      const codes = [];
+      for (const ip of ips) {
+        const url = await QRCode.toDataURL(ip, { width: 200, margin: 2 });
+        codes.push({ ip, url });
+      }
+      qrCodes = codes;
 
       await invoke("start_udp_host");
 
@@ -115,9 +117,16 @@
     >
       <h2 class="text-2xl font-bold text-cyan-400">Waiting for Opponent...</h2>
       <p class="text-neutral-400">Scan this QR code from the other device</p>
-      {#if qrCodeDataUrl}
-        <div class="bg-white p-4 rounded-xl">
-          <img src={qrCodeDataUrl} alt="QR Code" class="w-64 h-64" />
+      {#if qrCodes.length > 0}
+        <div class="flex flex-wrap gap-4 justify-center w-full max-w-4xl">
+          {#each qrCodes as code}
+            <div class="bg-white p-3 rounded-xl flex flex-col items-center">
+              <img src={code.url} alt="QR Code" class="w-48 h-48" />
+              <p class="text-sm font-bold font-mono text-black mt-2">
+                {code.ip}:8080
+              </p>
+            </div>
+          {/each}
         </div>
       {/if}
       <button

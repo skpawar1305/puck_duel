@@ -1,0 +1,1168 @@
+       Debug [tauri_cli::helpers::app_paths] Found Tauri project inside /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri on early lookup
+        Info [tauri_cli::mobile::android] Using installed NDK: /home/skpawar1305/Android/Sdk/ndk/28.2.13676358
+        Info [tauri_cli::build] Looking up installed tauri packages to check mismatched versions...
+     Running [tauri_cli::helpers] beforeBuildCommand `npm run build`
+       Debug [tauri_cli::helpers] Setting environment for hook {"TAURI_ENV_ARCH": "aarch64", "TAURI_ENV_TARGET_TRIPLE": "aarch64-linux-android", "TAURI_ENV_FAMILY": "unix", "TAURI_ENV_PLATFORM_VERSION": "24.4.0", "TAURI_ENV_PLATFORM": "android"}
+     Running [tauri_cli] Command `sh -c npm run build`
+
+> tauri-app@0.1.0 build
+> vite build
+
+vite v6.4.1 building SSR bundle for production...
+transforming...
+"Camera", "SpriteMaterial", "Texture", "EquirectangularReflectionMapping", "ReplaceStencilOp", "AlwaysStencilFunc", "Material" and "WireframeGeometry" are imported from external module "three" but never used in "node_modules/@threlte/extras/dist/hooks/useViewport.js", "node_modules/@threlte/extras/dist/components/HTML/utils.js", "node_modules/@threlte/extras/dist/components/AnimatedSpriteMaterial/AnimatedSpriteMaterial.svelte", "node_modules/@threlte/extras/dist/components/Decal/Decal.svelte", "node_modules/@threlte/extras/dist/components/MeshRefractionMaterial/MeshRefractionMaterial.svelte", "node_modules/@threlte/extras/dist/components/environment/Environment/Environment.svelte", "node_modules/@threlte/extras/dist/components/Mask/Mask.svelte" and "node_modules/@threlte/extras/dist/components/Wireframe/Wireframe.svelte".
+"Collider", "RigidBody" and "World" are imported from external module "@dimforge/rapier3d-compat" but never used in "node_modules/@threlte/rapier/dist/lib/createCollidersFromChildren.js" and "node_modules/@threlte/rapier/dist/lib/createPhysicsTasks.js".
+"DecalGeometry" is imported from external module "three/examples/jsm/geometries/DecalGeometry.js" but never used in "node_modules/@threlte/extras/dist/components/Decal/Decal.svelte".
+"ThreePerf" is imported from external module "three-perf" but never used in "node_modules/@threlte/extras/dist/components/PerfMonitor/PerfMonitor.svelte".
+"preloadFont" is imported from external module "troika-three-text" but never used in "node_modules/@threlte/extras/dist/components/Text/Text.svelte".
+✓ 405 modules transformed.
+rendering chunks...
+vite v6.4.1 building for production...
+transforming...
+✓ 556 modules transformed.
+rendering chunks...
+computing gzip size...
+.svelte-kit/output/client/_app/version.json                           0.03 kB │ gzip:     0.05 kB
+.svelte-kit/output/client/.vite/manifest.json                         3.45 kB │ gzip:     0.65 kB
+.svelte-kit/output/client/_app/immutable/assets/2.qtiVZQzZ.css        0.45 kB │ gzip:     0.26 kB
+.svelte-kit/output/client/_app/immutable/assets/0.BYD8gJdA.css       13.64 kB │ gzip:     3.44 kB
+.svelte-kit/output/client/_app/immutable/entry/start.DmvHu7d7.js      0.08 kB │ gzip:     0.09 kB
+.svelte-kit/output/client/_app/immutable/chunks/0Y8cG1et.js           0.19 kB │ gzip:     0.17 kB
+.svelte-kit/output/client/_app/immutable/chunks/CIx2D2g9.js           0.30 kB │ gzip:     0.22 kB
+.svelte-kit/output/client/_app/immutable/nodes/0.CsBp-wyS.js          0.34 kB │ gzip:     0.26 kB
+.svelte-kit/output/client/_app/immutable/nodes/1.C0J1t_E7.js          1.03 kB │ gzip:     0.60 kB
+.svelte-kit/output/client/_app/immutable/chunks/BW7nIJzW.js           1.13 kB │ gzip:     0.65 kB
+.svelte-kit/output/client/_app/immutable/chunks/BHmpld-t.js           1.32 kB │ gzip:     0.73 kB
+.svelte-kit/output/client/_app/immutable/chunks/BPyaNMcK.js           2.24 kB │ gzip:     0.99 kB
+.svelte-kit/output/client/_app/immutable/chunks/Bp_qVXxZ.js           3.16 kB │ gzip:     1.45 kB
+.svelte-kit/output/client/_app/immutable/entry/app.BjmQtN97.js        5.95 kB │ gzip:     2.75 kB
+.svelte-kit/output/client/_app/immutable/chunks/B5n1KfFx.js           7.75 kB │ gzip:     3.32 kB
+.svelte-kit/output/client/_app/immutable/chunks/CZ1qzkpT.js          24.48 kB │ gzip:     9.57 kB
+.svelte-kit/output/client/_app/immutable/chunks/F52RXyzF.js          27.54 kB │ gzip:    10.64 kB
+.svelte-kit/output/client/_app/immutable/nodes/2.uYwVKOh5.js      3,455.95 kB │ gzip: 1,171.48 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.76s
+.svelte-kit/output/server/.vite/manifest.json                           3.04 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BoeEMK_g.css      0.32 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.CriSiSiO.css   13.52 kB
+.svelte-kit/output/server/entries/pages/_layout.ts.js                   0.04 kB
+.svelte-kit/output/server/chunks/false.js                               0.05 kB
+.svelte-kit/output/server/entries/pages/_layout.svelte.js               0.17 kB
+.svelte-kit/output/server/internal.js                                   0.35 kB
+.svelte-kit/output/server/chunks/environment.js                         0.62 kB
+.svelte-kit/output/server/chunks/utils.js                               1.15 kB
+.svelte-kit/output/server/entries/fallbacks/error.svelte.js             1.38 kB
+.svelte-kit/output/server/chunks/index.js                               3.11 kB
+.svelte-kit/output/server/chunks/internal.js                            3.29 kB
+.svelte-kit/output/server/chunks/exports.js                             5.54 kB
+.svelte-kit/output/server/remote-entry.js                              19.00 kB
+.svelte-kit/output/server/entries/pages/_page.svelte.js                23.71 kB
+.svelte-kit/output/server/chunks/shared.js                             26.42 kB
+.svelte-kit/output/server/chunks/root.js                               27.98 kB
+.svelte-kit/output/server/chunks/index2.js                             86.64 kB
+.svelte-kit/output/server/index.js                                    123.11 kB
+✓ built in 9.10s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-static
+  Wrote site to "build"
+  ✔ done
+[1m[92m   Compiling[0m tauri-app v0.1.0 (/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 13.44s
+        Info [cargo_mobile2::android::jnilibs] symlinking lib "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" in jniLibs dir "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+        Info [cargo_mobile2::android::ndk] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libandroid.so"
+        Info [cargo_mobile2::android::ndk] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libdl.so"
+        Info [cargo_mobile2::android::ndk] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "liblog.so"
+        Info [cargo_mobile2::android::ndk] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libm.so"
+        Info [cargo_mobile2::android::ndk] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libc.so"
+        Info [cargo_mobile2::android::jnilibs] symlink at "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a/libtauri_app_lib.so" points to "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so"
+        Info [cargo_mobile2::android::jnilibs] symlink at "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/armeabi-v7a/libtauri_app_lib.so" points to "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/armv7-linux-androideabi/release/libtauri_app_lib.so"
+        Info [cargo_mobile2::android::jnilibs] symlink at "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/x86/libtauri_app_lib.so" points to "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/i686-linux-android/release/libtauri_app_lib.so"
+        Info [cargo_mobile2::android::jnilibs] symlink at "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/x86_64/libtauri_app_lib.so" points to "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/x86_64-linux-android/release/libtauri_app_lib.so"
+Initialized native services in: /home/skpawar1305/.gradle/native
+Initialized jansi services in: /home/skpawar1305/.gradle/native
+The client will now receive all logging from the daemon (pid: 307541). The daemon log file: /home/skpawar1305/.gradle/daemon/8.14.3/daemon-307541.out.log
+Starting 32nd build in daemon [uptime: 4 hrs 29 mins 16.754 secs, performance: 100%, GC rate: 0.00/s, heap usage: 7% of 2 GiB]
+Using 20 worker leases.
+Now considering [/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android, /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/buildSrc] as hierarchies to watch
+Now considering [/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/buildSrc, /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android] as hierarchies to watch
+Watching the file system is configured to be enabled if available
+File system watching is active
+Starting Build
+Settings evaluated using settings file '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/settings.gradle'.
+Projects loaded. Root project using build file '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/build.gradle.kts'.
+Included projects: [root project 'android', project ':app', project ':tauri-android', project ':tauri-plugin-opener']
+
+> Configure project :buildSrc
+Evaluating project ':buildSrc' using build file '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/buildSrc/build.gradle.kts'.
+Resolved plugin [id: 'org.gradle.kotlin.kotlin-dsl', version: '5.2.0']
+Using Kotlin Gradle Plugin gradle85 variant
+kotlin scripting plugin: created the scripting discovery configuration: kotlinScriptDef
+kotlin scripting plugin: created the scripting discovery configuration: testKotlinScriptDef
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/buildSrc/src/main/kotlin', not found
+Resolve mutations for :buildSrc:checkKotlinGradlePluginConfigurationErrors (Thread[#7820,Execution worker,5,main]) started.
+:buildSrc:checkKotlinGradlePluginConfigurationErrors (Thread[#7820,Execution worker,5,main]) started.
+
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+Skipping task ':buildSrc:checkKotlinGradlePluginConfigurationErrors' as task onlyIf 'errorDiagnostics are present' is false.
+Resolve mutations for :buildSrc:compileKotlin (Thread[#7820,Execution worker,5,main]) started.
+:buildSrc:compileKotlin (Thread[#7820,Execution worker,5,main]) started.
+
+> Task :buildSrc:compileKotlin UP-TO-DATE
+Caching disabled for task ':buildSrc:compileKotlin' because:
+  Build cache is disabled
+Skipping task ':buildSrc:compileKotlin' as it is up-to-date.
+Resolve mutations for :buildSrc:compileJava (Thread[#7820,Execution worker,5,main]) started.
+:buildSrc:compileJava (Thread[#7821,Execution worker Thread 2,5,main]) started.
+
+> Task :buildSrc:compileJava NO-SOURCE
+Skipping task ':buildSrc:compileJava' as it has no source files and no previous output files.
+Resolve mutations for :buildSrc:compileGroovy (Thread[#7821,Execution worker Thread 2,5,main]) started.
+:buildSrc:compileGroovy (Thread[#7821,Execution worker Thread 2,5,main]) started.
+
+> Task :buildSrc:compileGroovy NO-SOURCE
+Skipping task ':buildSrc:compileGroovy' as it has no source files and no previous output files.
+Resolve mutations for :buildSrc:pluginDescriptors (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:buildSrc:pluginDescriptors (Thread[#7819,included builds,5,main]) started.
+
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+Caching disabled for task ':buildSrc:pluginDescriptors' because:
+  Build cache is disabled
+  Not worth caching
+Skipping task ':buildSrc:pluginDescriptors' as it is up-to-date.
+Resolve mutations for :buildSrc:processResources (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:buildSrc:processResources (Thread[#7839,Execution worker Thread 19,5,main]) started.
+
+> Task :buildSrc:processResources UP-TO-DATE
+Caching disabled for task ':buildSrc:processResources' because:
+  Build cache is disabled
+  Not worth caching
+Skipping task ':buildSrc:processResources' as it is up-to-date.
+Resolve mutations for :buildSrc:classes (Thread[#7839,Execution worker Thread 19,5,main]) started.
+:buildSrc:classes (Thread[#7839,Execution worker Thread 19,5,main]) started.
+
+> Task :buildSrc:classes UP-TO-DATE
+Skipping task ':buildSrc:classes' as it has no actions.
+Resolve mutations for :buildSrc:jar (Thread[#7839,Execution worker Thread 19,5,main]) started.
+:buildSrc:jar (Thread[#7831,Execution worker Thread 11,5,main]) started.
+
+> Task :buildSrc:jar UP-TO-DATE
+Caching disabled for task ':buildSrc:jar' because:
+  Build cache is disabled
+  Not worth caching
+Skipping task ':buildSrc:jar' as it is up-to-date.
+
+> Configure project :
+Evaluating root project 'android' using build file '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/build.gradle.kts'.
+
+> Configure project :app
+Evaluating project ':app' using build file '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build.gradle.kts'.
+Resolved plugin [id: 'com.android.application']
+Resolved plugin [id: 'org.jetbrains.kotlin.android']
+Resolved plugin [id: 'rust']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle82 variant
+
+> Configure project :tauri-android
+Evaluating project ':tauri-android' using build file '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.2/mobile/android/build.gradle.kts'.
+Resolved plugin [id: 'com.android.library']
+Resolved plugin [id: 'org.jetbrains.kotlin.android']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle82 variant
+
+> Configure project :tauri-plugin-opener
+Evaluating project ':tauri-plugin-opener' using build file '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-plugin-opener-2.5.3/android/build.gradle.kts'.
+Resolved plugin [id: 'com.android.library']
+Resolved plugin [id: 'org.jetbrains.kotlin.android']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle82 variant
+All projects evaluated.
+Task name matched 'assembleUniversalRelease'
+Selected primary task 'assembleUniversalRelease' from project :
+Tasks to be executed: [task ':app:preBuild', task ':app:preUniversalReleaseBuild', task ':app:rustBuildArm64Release', task ':app:rustBuildArmRelease', task ':app:rustBuildX86Release', task ':app:rustBuildX86_64Release', task ':app:rustBuildUniversalRelease', task ':app:mergeUniversalReleaseJniLibFolders', task ':tauri-android:preBuild', task ':tauri-android:preReleaseBuild', task ':tauri-android:mergeReleaseJniLibFolders', task ':tauri-android:mergeReleaseNativeLibs', task ':tauri-android:copyReleaseJniLibsProjectOnly', task ':tauri-plugin-opener:preBuild', task ':tauri-plugin-opener:preReleaseBuild', task ':tauri-plugin-opener:mergeReleaseJniLibFolders', task ':tauri-plugin-opener:mergeReleaseNativeLibs', task ':tauri-plugin-opener:copyReleaseJniLibsProjectOnly', task ':app:mergeUniversalReleaseNativeLibs', task ':app:stripUniversalReleaseDebugSymbols', task ':app:extractUniversalReleaseNativeSymbolTables', task ':app:mergeUniversalReleaseNativeDebugMetadata', task ':tauri-android:checkKotlinGradlePluginConfigurationErrors', task ':tauri-android:generateReleaseBuildConfig', task ':tauri-android:generateReleaseResValues', task ':tauri-android:generateReleaseResources', task ':tauri-android:packageReleaseResources', task ':tauri-android:parseReleaseLocalResources', task ':tauri-android:generateReleaseRFile', task ':tauri-android:compileReleaseKotlin', task ':tauri-android:javaPreCompileRelease', task ':tauri-android:compileReleaseJavaWithJavac', task ':tauri-android:bundleLibCompileToJarRelease', task ':tauri-plugin-opener:checkKotlinGradlePluginConfigurationErrors', task ':tauri-plugin-opener:generateReleaseResValues', task ':tauri-plugin-opener:generateReleaseResources', task ':tauri-plugin-opener:packageReleaseResources', task ':tauri-plugin-opener:parseReleaseLocalResources', task ':tauri-plugin-opener:generateReleaseRFile', task ':tauri-plugin-opener:compileReleaseKotlin', task ':tauri-plugin-opener:javaPreCompileRelease', task ':tauri-plugin-opener:compileReleaseJavaWithJavac', task ':tauri-plugin-opener:mergeReleaseGeneratedProguardFiles', task ':tauri-plugin-opener:exportReleaseConsumerProguardFiles', task ':tauri-android:mergeReleaseGeneratedProguardFiles', task ':tauri-android:exportReleaseConsumerProguardFiles', task ':app:buildKotlinToolingMetadata', task ':app:checkUniversalReleaseDuplicateClasses', task ':app:checkKotlinGradlePluginConfigurationErrors', task ':app:generateUniversalReleaseBuildConfig', task ':tauri-android:writeReleaseAarMetadata', task ':tauri-plugin-opener:writeReleaseAarMetadata', task ':app:checkUniversalReleaseAarMetadata', task ':app:generateUniversalReleaseResValues', task ':app:mapUniversalReleaseSourceSetPaths', task ':app:generateUniversalReleaseResources', task ':app:mergeUniversalReleaseResources', task ':app:packageUniversalReleaseResources', task ':app:parseUniversalReleaseLocalResources', task ':app:createUniversalReleaseCompatibleScreenManifests', task ':app:extractDeepLinksUniversalRelease', task ':tauri-android:extractDeepLinksRelease', task ':tauri-android:processReleaseManifest', task ':tauri-plugin-opener:extractDeepLinksRelease', task ':tauri-plugin-opener:processReleaseManifest', task ':app:processUniversalReleaseMainManifest', task ':app:processUniversalReleaseManifest', task ':app:processUniversalReleaseManifestForPackage', task ':tauri-android:compileReleaseLibraryResources', task ':tauri-plugin-opener:compileReleaseLibraryResources', task ':app:processUniversalReleaseResources', task ':tauri-plugin-opener:bundleLibCompileToJarRelease', task ':app:compileUniversalReleaseKotlin', task ':app:javaPreCompileUniversalRelease', task ':app:compileUniversalReleaseJavaWithJavac', task ':tauri-android:prepareReleaseArtProfile', task ':tauri-plugin-opener:prepareReleaseArtProfile', task ':app:mergeUniversalReleaseArtProfile', task ':tauri-android:bundleLibRuntimeToJarRelease', task ':tauri-plugin-opener:bundleLibRuntimeToJarRelease', task ':app:expandUniversalReleaseArtProfileWildcards', task ':app:extractProguardFiles', task ':app:mergeUniversalReleaseGeneratedProguardFiles', task ':app:processUniversalReleaseJavaRes', task ':tauri-android:processReleaseJavaRes', task ':tauri-plugin-opener:processReleaseJavaRes', task ':app:mergeUniversalReleaseJavaResource', task ':app:mergeUniversalReleaseStartupProfile', task ':app:minifyUniversalReleaseWithR8', task ':app:compileUniversalReleaseArtProfile', task ':app:mergeUniversalReleaseShaders', task ':app:compileUniversalReleaseShaders', task ':app:generateUniversalReleaseAssets', task ':tauri-android:mergeReleaseShaders', task ':tauri-android:compileReleaseShaders', task ':tauri-android:generateReleaseAssets', task ':tauri-android:mergeReleaseAssets', task ':tauri-plugin-opener:mergeReleaseShaders', task ':tauri-plugin-opener:compileReleaseShaders', task ':tauri-plugin-opener:generateReleaseAssets', task ':tauri-plugin-opener:mergeReleaseAssets', task ':app:mergeUniversalReleaseAssets', task ':app:compressUniversalReleaseAssets', task ':app:extractUniversalReleaseVersionControlInfo', task ':app:optimizeUniversalReleaseResources', task ':app:collectUniversalReleaseDependencies', task ':app:sdkUniversalReleaseDependencyData', task ':app:writeUniversalReleaseAppMetadata', task ':app:writeUniversalReleaseSigningConfigVersions', task ':app:packageUniversalRelease', task ':app:createUniversalReleaseApkListingFileRedirect', task ':app:assembleUniversalRelease']
+Tasks that were excluded: []
+work action Parameters of FilterShrinkerRulesTransform (Thread[#7819,included builds,5,main]) started.
+Resolve mutations for :app:preBuild (Thread[#7819,included builds,5,main]) started.
+:app:preBuild (Thread[#7819,included builds,5,main]) started.
+
+> Task :app:preBuild UP-TO-DATE
+Skipping task ':app:preBuild' as it has no actions.
+Resolve mutations for :app:preUniversalReleaseBuild (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:app:preUniversalReleaseBuild (Thread[#7825,Execution worker Thread 6,5,main]) started.
+
+> Task :app:preUniversalReleaseBuild UP-TO-DATE
+Skipping task ':app:preUniversalReleaseBuild' as it has no actions.
+Resolve mutations for :app:rustBuildArm64Release (Thread[#7825,Execution worker Thread 6,5,main]) started.
+:app:rustBuildArm64Release (Thread[#7825,Execution worker Thread 6,5,main]) started.
+        Info [jsonrpsee_server::server] connection; remote_addr=127.0.0.1:53984 conn_id=0
+       Debug [jsonrpsee-server] Accepting new connection 1/100
+
+> Task :app:rustBuildArm64Release
+Caching disabled for task ':app:rustBuildArm64Release' because:
+  Build cache is disabled
+Task ':app:rustBuildArm64Release' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Starting process 'command 'npm''. Working directory: /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri Command: npm run -- tauri android android-studio-script -v --release --target aarch64
+Successfully started process 'command 'npm''
+
+> tauri-app@0.1.0 tauri
+> tauri android android-studio-script -v --release --target aarch64
+
+[1m[34m       Debug[0m [[30mtauri_cli::helpers::app_paths[0m] Found Tauri project inside /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri on early lookup
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connecting to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connection established to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[32m        Info[0m [[30mtauri_cli::mobile::android[0m] Using installed NDK: /home/skpawar1305/Android/Sdk/ndk/28.2.13676358
+[1m[92m   Compiling[0m tauri-app v0.1.0 (/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 12.42s
+[1m[32m        Info[0m [[30mcargo_mobile2::android::jnilibs[0m] symlinking lib "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" in jniLibs dir "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libandroid.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libdl.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "liblog.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libm.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/aarch64-linux-android/release/libtauri_app_lib.so" requires shared lib "libc.so"
+Resolve mutations for :app:rustBuildArmRelease (Thread[#7825,Execution worker Thread 6,5,main]) started.
+:app:rustBuildArmRelease (Thread[#7825,Execution worker Thread 6,5,main]) started.
+        Info [jsonrpsee_server::server] connection; remote_addr=127.0.0.1:47422 conn_id=1
+       Debug [jsonrpsee-server] Accepting new connection 1/100
+
+> Task :app:rustBuildArmRelease
+Caching disabled for task ':app:rustBuildArmRelease' because:
+  Build cache is disabled
+Task ':app:rustBuildArmRelease' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Starting process 'command 'npm''. Working directory: /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri Command: npm run -- tauri android android-studio-script -v --release --target armv7
+Successfully started process 'command 'npm''
+
+> tauri-app@0.1.0 tauri
+> tauri android android-studio-script -v --release --target armv7
+
+[1m[34m       Debug[0m [[30mtauri_cli::helpers::app_paths[0m] Found Tauri project inside /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri on early lookup
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connecting to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connection established to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[32m        Info[0m [[30mtauri_cli::mobile::android[0m] Using installed NDK: /home/skpawar1305/Android/Sdk/ndk/28.2.13676358
+[1m[92m   Compiling[0m tauri-app v0.1.0 (/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 13.17s
+[1m[32m        Info[0m [[30mcargo_mobile2::android::jnilibs[0m] symlinking lib "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/armv7-linux-androideabi/release/libtauri_app_lib.so" in jniLibs dir "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/armeabi-v7a"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/armv7-linux-androideabi/release/libtauri_app_lib.so" requires shared lib "libandroid.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/armv7-linux-androideabi/release/libtauri_app_lib.so" requires shared lib "libdl.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/armv7-linux-androideabi/release/libtauri_app_lib.so" requires shared lib "liblog.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/armv7-linux-androideabi/release/libtauri_app_lib.so" requires shared lib "libm.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/armv7-linux-androideabi/release/libtauri_app_lib.so" requires shared lib "libc.so"
+Resolve mutations for :app:rustBuildX86Release (Thread[#7825,Execution worker Thread 6,5,main]) started.
+:app:rustBuildX86Release (Thread[#7825,Execution worker Thread 6,5,main]) started.
+        Info [jsonrpsee_server::server] connection; remote_addr=127.0.0.1:35204 conn_id=2
+       Debug [jsonrpsee-server] Accepting new connection 1/100
+
+> Task :app:rustBuildX86Release
+Caching disabled for task ':app:rustBuildX86Release' because:
+  Build cache is disabled
+Task ':app:rustBuildX86Release' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Starting process 'command 'npm''. Working directory: /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri Command: npm run -- tauri android android-studio-script -v --release --target i686
+Successfully started process 'command 'npm''
+
+> tauri-app@0.1.0 tauri
+> tauri android android-studio-script -v --release --target i686
+
+[1m[34m       Debug[0m [[30mtauri_cli::helpers::app_paths[0m] Found Tauri project inside /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri on early lookup
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connecting to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connection established to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[32m        Info[0m [[30mtauri_cli::mobile::android[0m] Using installed NDK: /home/skpawar1305/Android/Sdk/ndk/28.2.13676358
+[1m[92m   Compiling[0m tauri-app v0.1.0 (/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 13.27s
+[1m[32m        Info[0m [[30mcargo_mobile2::android::jnilibs[0m] symlinking lib "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/i686-linux-android/release/libtauri_app_lib.so" in jniLibs dir "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/x86"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/i686-linux-android/release/libtauri_app_lib.so" requires shared lib "libandroid.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/i686-linux-android/release/libtauri_app_lib.so" requires shared lib "libdl.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/i686-linux-android/release/libtauri_app_lib.so" requires shared lib "liblog.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/i686-linux-android/release/libtauri_app_lib.so" requires shared lib "libm.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/i686-linux-android/release/libtauri_app_lib.so" requires shared lib "libc.so"
+Resolve mutations for :app:rustBuildX86_64Release (Thread[#7825,Execution worker Thread 6,5,main]) started.
+:app:rustBuildX86_64Release (Thread[#7825,Execution worker Thread 6,5,main]) started.
+        Info [jsonrpsee_server::server] connection; remote_addr=127.0.0.1:43326 conn_id=3
+       Debug [jsonrpsee-server] Accepting new connection 1/100
+
+> Task :app:rustBuildX86_64Release
+Caching disabled for task ':app:rustBuildX86_64Release' because:
+  Build cache is disabled
+Task ':app:rustBuildX86_64Release' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Starting process 'command 'npm''. Working directory: /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri Command: npm run -- tauri android android-studio-script -v --release --target x86_64
+Successfully started process 'command 'npm''
+
+> tauri-app@0.1.0 tauri
+> tauri android android-studio-script -v --release --target x86_64
+
+[1m[34m       Debug[0m [[30mtauri_cli::helpers::app_paths[0m] Found Tauri project inside /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri on early lookup
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connecting to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[34m       Debug[0m [[30mjsonrpsee-client[0m] Connection established to target: Target { host: "127.0.0.1", host_header: "127.0.0.1:41937", _mode: Plain, path_and_query: "/", basic_auth: None }
+[1m[32m        Info[0m [[30mtauri_cli::mobile::android[0m] Using installed NDK: /home/skpawar1305/Android/Sdk/ndk/28.2.13676358
+[1m[92m   Compiling[0m tauri-app v0.1.0 (/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri)
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 12.78s
+[1m[32m        Info[0m [[30mcargo_mobile2::android::jnilibs[0m] symlinking lib "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/x86_64-linux-android/release/libtauri_app_lib.so" in jniLibs dir "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/x86_64"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/x86_64-linux-android/release/libtauri_app_lib.so" requires shared lib "libandroid.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/x86_64-linux-android/release/libtauri_app_lib.so" requires shared lib "libdl.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/x86_64-linux-android/release/libtauri_app_lib.so" requires shared lib "liblog.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/x86_64-linux-android/release/libtauri_app_lib.so" requires shared lib "libm.so"
+[1m[32m        Info[0m [[30mcargo_mobile2::android::ndk[0m] "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/target/x86_64-linux-android/release/libtauri_app_lib.so" requires shared lib "libc.so"
+Resolve mutations for :app:rustBuildUniversalRelease (Thread[#7825,Execution worker Thread 6,5,main]) started.
+:app:rustBuildUniversalRelease (Thread[#7825,Execution worker Thread 6,5,main]) started.
+
+> Task :app:rustBuildUniversalRelease
+Skipping task ':app:rustBuildUniversalRelease' as it has no actions.
+Resolve mutations for :app:mergeUniversalReleaseJniLibFolders (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:app:mergeUniversalReleaseJniLibFolders (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :app:mergeUniversalReleaseJniLibFolders
+Caching disabled for task ':app:mergeUniversalReleaseJniLibFolders' because:
+  Build cache is disabled
+  Simple merging task
+Task ':app:mergeUniversalReleaseJniLibFolders' is not up-to-date because:
+  Input property 'sourceFolderInputs' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a/libtauri_app_lib.so has changed.
+  Input property 'sourceFolderInputs' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/armeabi-v7a/libtauri_app_lib.so has changed.
+  Input property 'sourceFolderInputs' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/jniLibs/x86/libtauri_app_lib.so has changed.
+  and more...
+Resolve mutations for :tauri-android:preBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-android:preBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-android:preBuild UP-TO-DATE
+Skipping task ':tauri-android:preBuild' as it has no actions.
+Resolve mutations for :tauri-android:preReleaseBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-android:preReleaseBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-android:preReleaseBuild UP-TO-DATE
+Skipping task ':tauri-android:preReleaseBuild' as it has no actions.
+Resolve mutations for :tauri-android:mergeReleaseJniLibFolders (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-android:mergeReleaseJniLibFolders (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-android:mergeReleaseJniLibFolders UP-TO-DATE
+Caching disabled for task ':tauri-android:mergeReleaseJniLibFolders' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-android:mergeReleaseJniLibFolders' as it is up-to-date.
+Resolve mutations for :tauri-android:mergeReleaseNativeLibs (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-android:mergeReleaseNativeLibs (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-android:mergeReleaseNativeLibs NO-SOURCE
+Skipping task ':tauri-android:mergeReleaseNativeLibs' as it has no source files and no previous output files.
+Resolve mutations for :tauri-android:copyReleaseJniLibsProjectOnly (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-android:copyReleaseJniLibsProjectOnly (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-android:copyReleaseJniLibsProjectOnly UP-TO-DATE
+Caching disabled for task ':tauri-android:copyReleaseJniLibsProjectOnly' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-android:copyReleaseJniLibsProjectOnly' as it is up-to-date.
+work action resolve jni (project :tauri-android) (Thread[#7835,Execution worker Thread 15,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:preBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-plugin-opener:preBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-plugin-opener:preBuild UP-TO-DATE
+Skipping task ':tauri-plugin-opener:preBuild' as it has no actions.
+Resolve mutations for :tauri-plugin-opener:preReleaseBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-plugin-opener:preReleaseBuild (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-plugin-opener:preReleaseBuild UP-TO-DATE
+Skipping task ':tauri-plugin-opener:preReleaseBuild' as it has no actions.
+Resolve mutations for :tauri-plugin-opener:mergeReleaseJniLibFolders (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-plugin-opener:mergeReleaseJniLibFolders (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-plugin-opener:mergeReleaseJniLibFolders UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:mergeReleaseJniLibFolders' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-plugin-opener:mergeReleaseJniLibFolders' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:mergeReleaseNativeLibs (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-plugin-opener:mergeReleaseNativeLibs (Thread[#7835,Execution worker Thread 15,5,main]) started.
+
+> Task :tauri-plugin-opener:mergeReleaseNativeLibs NO-SOURCE
+Skipping task ':tauri-plugin-opener:mergeReleaseNativeLibs' as it has no source files and no previous output files.
+Resolve mutations for :tauri-plugin-opener:copyReleaseJniLibsProjectOnly (Thread[#7828,Execution worker Thread 8,5,main]) started.
+:tauri-plugin-opener:copyReleaseJniLibsProjectOnly (Thread[#7828,Execution worker Thread 8,5,main]) started.
+
+> Task :tauri-plugin-opener:copyReleaseJniLibsProjectOnly UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:copyReleaseJniLibsProjectOnly' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-plugin-opener:copyReleaseJniLibsProjectOnly' as it is up-to-date.
+work action resolve jni (project :tauri-plugin-opener) (Thread[#7838,Execution worker Thread 18,5,main]) started.
+Resolve mutations for :app:mergeUniversalReleaseNativeLibs (Thread[#7838,Execution worker Thread 18,5,main]) started.
+:app:mergeUniversalReleaseNativeLibs (Thread[#7838,Execution worker Thread 18,5,main]) started.
+Resolve mutations for :tauri-android:checkKotlinGradlePluginConfigurationErrors (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:tauri-android:checkKotlinGradlePluginConfigurationErrors (Thread[#7824,Execution worker Thread 5,5,main]) started.
+
+> Task :tauri-android:checkKotlinGradlePluginConfigurationErrors
+Caching disabled for task ':tauri-android:checkKotlinGradlePluginConfigurationErrors' because:
+  Build cache is disabled
+Task ':tauri-android:checkKotlinGradlePluginConfigurationErrors' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Resolve mutations for :tauri-android:generateReleaseBuildConfig (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:tauri-android:generateReleaseBuildConfig (Thread[#7824,Execution worker Thread 5,5,main]) started.
+
+> Task :tauri-android:generateReleaseBuildConfig UP-TO-DATE
+Caching disabled for task ':tauri-android:generateReleaseBuildConfig' because:
+  Build cache is disabled
+Skipping task ':tauri-android:generateReleaseBuildConfig' as it is up-to-date.
+Resolve mutations for :tauri-android:generateReleaseResValues (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:tauri-android:generateReleaseResValues (Thread[#7824,Execution worker Thread 5,5,main]) started.
+
+> Task :tauri-android:generateReleaseResValues UP-TO-DATE
+Caching disabled for task ':tauri-android:generateReleaseResValues' because:
+  Build cache is disabled
+Skipping task ':tauri-android:generateReleaseResValues' as it is up-to-date.
+Resolve mutations for :tauri-android:generateReleaseResources (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:tauri-android:generateReleaseResources (Thread[#7824,Execution worker Thread 5,5,main]) started.
+
+> Task :tauri-android:generateReleaseResources UP-TO-DATE
+Caching disabled for task ':tauri-android:generateReleaseResources' because:
+  Build cache is disabled
+Skipping task ':tauri-android:generateReleaseResources' as it is up-to-date.
+Resolve mutations for :tauri-android:packageReleaseResources (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:tauri-android:packageReleaseResources (Thread[#7824,Execution worker Thread 5,5,main]) started.
+
+> Task :tauri-android:packageReleaseResources UP-TO-DATE
+Caching disabled for task ':tauri-android:packageReleaseResources' because:
+  Build cache is disabled
+Skipping task ':tauri-android:packageReleaseResources' as it is up-to-date.
+work action resolve packageReleaseResources (project :tauri-android) (Thread[#7824,Execution worker Thread 5,5,main]) started.
+Resolve mutations for :tauri-android:parseReleaseLocalResources (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:tauri-android:parseReleaseLocalResources (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :tauri-android:parseReleaseLocalResources UP-TO-DATE
+Caching disabled for task ':tauri-android:parseReleaseLocalResources' because:
+  Build cache is disabled
+Skipping task ':tauri-android:parseReleaseLocalResources' as it is up-to-date.
+Resolve mutations for :tauri-android:generateReleaseRFile (Thread[#7837,Execution worker Thread 17,5,main]) started.
+:tauri-android:generateReleaseRFile (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :tauri-android:generateReleaseRFile UP-TO-DATE
+Caching disabled for task ':tauri-android:generateReleaseRFile' because:
+  Build cache is disabled
+Skipping task ':tauri-android:generateReleaseRFile' as it is up-to-date.
+work action resolve package-aware-r.txt (project :tauri-android) (Thread[#7837,Execution worker Thread 17,5,main]) started.
+Resolve mutations for :tauri-android:compileReleaseKotlin (Thread[#7837,Execution worker Thread 17,5,main]) started.
+:tauri-android:compileReleaseKotlin (Thread[#7828,Execution worker Thread 8,5,main]) started.
+
+> Task :tauri-android:compileReleaseKotlin UP-TO-DATE
+Caching disabled for task ':tauri-android:compileReleaseKotlin' because:
+  Build cache is disabled
+Skipping task ':tauri-android:compileReleaseKotlin' as it is up-to-date.
+Resolve mutations for :tauri-android:javaPreCompileRelease (Thread[#7828,Execution worker Thread 8,5,main]) started.
+:tauri-android:javaPreCompileRelease (Thread[#7828,Execution worker Thread 8,5,main]) started.
+
+> Task :tauri-android:javaPreCompileRelease UP-TO-DATE
+Caching disabled for task ':tauri-android:javaPreCompileRelease' because:
+  Build cache is disabled
+Skipping task ':tauri-android:javaPreCompileRelease' as it is up-to-date.
+Resolve mutations for :tauri-android:compileReleaseJavaWithJavac (Thread[#7828,Execution worker Thread 8,5,main]) started.
+:tauri-android:compileReleaseJavaWithJavac (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :tauri-android:compileReleaseJavaWithJavac UP-TO-DATE
+Custom actions are attached to task ':tauri-android:compileReleaseJavaWithJavac'.
+Caching disabled for task ':tauri-android:compileReleaseJavaWithJavac' because:
+  Build cache is disabled
+Skipping task ':tauri-android:compileReleaseJavaWithJavac' as it is up-to-date.
+No compile result for :tauri-android:compileReleaseJavaWithJavac
+No compile result for :tauri-android:compileReleaseJavaWithJavac
+No compile result for :tauri-android:compileReleaseJavaWithJavac
+Resolve mutations for :tauri-android:bundleLibCompileToJarRelease (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:tauri-android:bundleLibCompileToJarRelease (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :tauri-android:bundleLibCompileToJarRelease UP-TO-DATE
+Caching disabled for task ':tauri-android:bundleLibCompileToJarRelease' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-android:bundleLibCompileToJarRelease' as it is up-to-date.
+work action resolve classes.jar (project :tauri-android) (Thread[#7832,Execution worker Thread 12,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:checkKotlinGradlePluginConfigurationErrors (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:tauri-plugin-opener:checkKotlinGradlePluginConfigurationErrors (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :tauri-plugin-opener:checkKotlinGradlePluginConfigurationErrors
+Caching disabled for task ':tauri-plugin-opener:checkKotlinGradlePluginConfigurationErrors' because:
+  Build cache is disabled
+Task ':tauri-plugin-opener:checkKotlinGradlePluginConfigurationErrors' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Resolve mutations for :tauri-plugin-opener:generateReleaseResValues (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:tauri-plugin-opener:generateReleaseResValues (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :tauri-plugin-opener:generateReleaseResValues UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:generateReleaseResValues' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:generateReleaseResValues' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:generateReleaseResources (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:tauri-plugin-opener:generateReleaseResources (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:generateReleaseResources UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:generateReleaseResources' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:generateReleaseResources' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:packageReleaseResources (Thread[#7822,Execution worker Thread 3,5,main]) started.
+:tauri-plugin-opener:packageReleaseResources (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:packageReleaseResources UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:packageReleaseResources' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:packageReleaseResources' as it is up-to-date.
+work action resolve packageReleaseResources (project :tauri-plugin-opener) (Thread[#7822,Execution worker Thread 3,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:parseReleaseLocalResources (Thread[#7822,Execution worker Thread 3,5,main]) started.
+:tauri-plugin-opener:parseReleaseLocalResources (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:parseReleaseLocalResources UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:parseReleaseLocalResources' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:parseReleaseLocalResources' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:generateReleaseRFile (Thread[#7822,Execution worker Thread 3,5,main]) started.
+:tauri-plugin-opener:generateReleaseRFile (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:generateReleaseRFile UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:generateReleaseRFile' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:generateReleaseRFile' as it is up-to-date.
+work action resolve package-aware-r.txt (project :tauri-plugin-opener) (Thread[#7822,Execution worker Thread 3,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:compileReleaseKotlin (Thread[#7822,Execution worker Thread 3,5,main]) started.
+:tauri-plugin-opener:compileReleaseKotlin (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:compileReleaseKotlin UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:compileReleaseKotlin' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:compileReleaseKotlin' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:javaPreCompileRelease (Thread[#7822,Execution worker Thread 3,5,main]) started.
+:tauri-plugin-opener:javaPreCompileRelease (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:javaPreCompileRelease UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:javaPreCompileRelease' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:javaPreCompileRelease' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:compileReleaseJavaWithJavac (Thread[#7822,Execution worker Thread 3,5,main]) started.
+:tauri-plugin-opener:compileReleaseJavaWithJavac (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:compileReleaseJavaWithJavac NO-SOURCE
+Skipping task ':tauri-plugin-opener:compileReleaseJavaWithJavac' as it has no source files and no previous output files.
+Resolve mutations for :tauri-plugin-opener:mergeReleaseGeneratedProguardFiles (Thread[#7822,Execution worker Thread 3,5,main]) started.
+:tauri-plugin-opener:mergeReleaseGeneratedProguardFiles (Thread[#7822,Execution worker Thread 3,5,main]) started.
+
+> Task :tauri-plugin-opener:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:mergeReleaseGeneratedProguardFiles' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-plugin-opener:mergeReleaseGeneratedProguardFiles' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:exportReleaseConsumerProguardFiles (Thread[#7837,Execution worker Thread 17,5,main]) started.
+:tauri-plugin-opener:exportReleaseConsumerProguardFiles (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :tauri-plugin-opener:exportReleaseConsumerProguardFiles UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:exportReleaseConsumerProguardFiles' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-plugin-opener:exportReleaseConsumerProguardFiles' as it is up-to-date.
+work action resolve exportReleaseConsumerProguardFiles (project :tauri-plugin-opener) (Thread[#7837,Execution worker Thread 17,5,main]) started.
+FilterShrinkerRulesTransform (Thread[#7837,Execution worker Thread 17,5,main]) started.
+Resolve mutations for :tauri-android:mergeReleaseGeneratedProguardFiles (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:tauri-android:mergeReleaseGeneratedProguardFiles (Thread[#7823,Execution worker Thread 4,5,main]) started.
+
+> Task :tauri-android:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+Caching disabled for task ':tauri-android:mergeReleaseGeneratedProguardFiles' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-android:mergeReleaseGeneratedProguardFiles' as it is up-to-date.
+Resolve mutations for :tauri-android:exportReleaseConsumerProguardFiles (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:tauri-android:exportReleaseConsumerProguardFiles (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :tauri-android:exportReleaseConsumerProguardFiles UP-TO-DATE
+Caching disabled for task ':tauri-android:exportReleaseConsumerProguardFiles' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-android:exportReleaseConsumerProguardFiles' as it is up-to-date.
+work action resolve exportReleaseConsumerProguardFiles (project :tauri-android) (Thread[#7837,Execution worker Thread 17,5,main]) started.
+FilterShrinkerRulesTransform (Thread[#7837,Execution worker Thread 17,5,main]) started.
+Resolve mutations for :app:buildKotlinToolingMetadata (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:app:buildKotlinToolingMetadata (Thread[#7825,Execution worker Thread 6,5,main]) started.
+
+> Task :app:buildKotlinToolingMetadata UP-TO-DATE
+Caching disabled for task ':app:buildKotlinToolingMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:buildKotlinToolingMetadata' as it is up-to-date.
+Resolve mutations for :app:checkUniversalReleaseDuplicateClasses (Thread[#7837,Execution worker Thread 17,5,main]) started.
+:app:checkUniversalReleaseDuplicateClasses (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :app:checkUniversalReleaseDuplicateClasses UP-TO-DATE
+Caching disabled for task ':app:checkUniversalReleaseDuplicateClasses' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:checkUniversalReleaseDuplicateClasses' as it is up-to-date.
+Resolve mutations for :app:checkKotlinGradlePluginConfigurationErrors (Thread[#7837,Execution worker Thread 17,5,main]) started.
+:app:checkKotlinGradlePluginConfigurationErrors (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+Caching disabled for task ':app:checkKotlinGradlePluginConfigurationErrors' because:
+  Build cache is disabled
+Task ':app:checkKotlinGradlePluginConfigurationErrors' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Resolve mutations for :app:generateUniversalReleaseBuildConfig (Thread[#7833,Execution worker Thread 13,5,main]) started.
+:app:generateUniversalReleaseBuildConfig (Thread[#7833,Execution worker Thread 13,5,main]) started.
+
+> Task :app:generateUniversalReleaseBuildConfig UP-TO-DATE
+Caching disabled for task ':app:generateUniversalReleaseBuildConfig' because:
+  Build cache is disabled
+Skipping task ':app:generateUniversalReleaseBuildConfig' as it is up-to-date.
+Resolve mutations for :tauri-android:writeReleaseAarMetadata (Thread[#7821,Execution worker Thread 2,5,main]) started.
+:tauri-android:writeReleaseAarMetadata (Thread[#7821,Execution worker Thread 2,5,main]) started.
+
+> Task :tauri-android:writeReleaseAarMetadata UP-TO-DATE
+Caching disabled for task ':tauri-android:writeReleaseAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-android:writeReleaseAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :tauri-android) (Thread[#7821,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:writeReleaseAarMetadata (Thread[#7821,Execution worker Thread 2,5,main]) started.
+:tauri-plugin-opener:writeReleaseAarMetadata (Thread[#7821,Execution worker Thread 2,5,main]) started.
+
+> Task :tauri-plugin-opener:writeReleaseAarMetadata UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:writeReleaseAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-plugin-opener:writeReleaseAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :tauri-plugin-opener) (Thread[#7832,Execution worker Thread 12,5,main]) started.
+Resolve mutations for :app:checkUniversalReleaseAarMetadata (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:app:checkUniversalReleaseAarMetadata (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:checkUniversalReleaseAarMetadata UP-TO-DATE
+Caching disabled for task ':app:checkUniversalReleaseAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:checkUniversalReleaseAarMetadata' as it is up-to-date.
+Resolve mutations for :app:generateUniversalReleaseResValues (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:generateUniversalReleaseResValues (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:generateUniversalReleaseResValues UP-TO-DATE
+Caching disabled for task ':app:generateUniversalReleaseResValues' because:
+  Build cache is disabled
+Skipping task ':app:generateUniversalReleaseResValues' as it is up-to-date.
+Resolve mutations for :app:mapUniversalReleaseSourceSetPaths (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:mapUniversalReleaseSourceSetPaths (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:mapUniversalReleaseSourceSetPaths UP-TO-DATE
+Caching disabled for task ':app:mapUniversalReleaseSourceSetPaths' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:mapUniversalReleaseSourceSetPaths' as it is up-to-date.
+Resolve mutations for :app:generateUniversalReleaseResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:generateUniversalReleaseResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:generateUniversalReleaseResources UP-TO-DATE
+Caching disabled for task ':app:generateUniversalReleaseResources' because:
+  Build cache is disabled
+Skipping task ':app:generateUniversalReleaseResources' as it is up-to-date.
+Resolve mutations for :app:mergeUniversalReleaseResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:mergeUniversalReleaseResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:mergeUniversalReleaseResources UP-TO-DATE
+Caching disabled for task ':app:mergeUniversalReleaseResources' because:
+  Build cache is disabled
+Skipping task ':app:mergeUniversalReleaseResources' as it is up-to-date.
+Resolve mutations for :app:packageUniversalReleaseResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:packageUniversalReleaseResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:packageUniversalReleaseResources UP-TO-DATE
+Caching disabled for task ':app:packageUniversalReleaseResources' because:
+  Build cache is disabled
+Skipping task ':app:packageUniversalReleaseResources' as it is up-to-date.
+Resolve mutations for :app:parseUniversalReleaseLocalResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:parseUniversalReleaseLocalResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:parseUniversalReleaseLocalResources UP-TO-DATE
+Caching disabled for task ':app:parseUniversalReleaseLocalResources' because:
+  Build cache is disabled
+Skipping task ':app:parseUniversalReleaseLocalResources' as it is up-to-date.
+Resolve mutations for :app:createUniversalReleaseCompatibleScreenManifests (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:createUniversalReleaseCompatibleScreenManifests (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:createUniversalReleaseCompatibleScreenManifests UP-TO-DATE
+Caching disabled for task ':app:createUniversalReleaseCompatibleScreenManifests' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:createUniversalReleaseCompatibleScreenManifests' as it is up-to-date.
+Resolve mutations for :app:extractDeepLinksUniversalRelease (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:extractDeepLinksUniversalRelease (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:extractDeepLinksUniversalRelease UP-TO-DATE
+Caching disabled for task ':app:extractDeepLinksUniversalRelease' because:
+  Build cache is disabled
+Skipping task ':app:extractDeepLinksUniversalRelease' as it is up-to-date.
+Resolve mutations for :tauri-android:extractDeepLinksRelease (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:tauri-android:extractDeepLinksRelease (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :tauri-android:extractDeepLinksRelease UP-TO-DATE
+Caching disabled for task ':tauri-android:extractDeepLinksRelease' because:
+  Build cache is disabled
+Skipping task ':tauri-android:extractDeepLinksRelease' as it is up-to-date.
+work action resolve navigation.json (project :tauri-android) (Thread[#7826,Execution worker Thread 7,5,main]) started.
+Resolve mutations for :tauri-android:processReleaseManifest (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:tauri-android:processReleaseManifest (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:mergeUniversalReleaseNativeLibs
+Caching disabled for task ':app:mergeUniversalReleaseNativeLibs' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:mergeUniversalReleaseNativeLibs' is not up-to-date because:
+  Input property 'projectNativeLibs' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_jni_libs/universalRelease/mergeUniversalReleaseJniLibFolders/out/arm64-v8a/libtauri_app_lib.so has changed.
+  Input property 'projectNativeLibs' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_jni_libs/universalRelease/mergeUniversalReleaseJniLibFolders/out/armeabi-v7a/libtauri_app_lib.so has changed.
+  Input property 'projectNativeLibs' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_jni_libs/universalRelease/mergeUniversalReleaseJniLibFolders/out/x86/libtauri_app_lib.so has changed.
+  and more...
+
+> Task :tauri-android:processReleaseManifest UP-TO-DATE
+Caching disabled for task ':tauri-android:processReleaseManifest' because:
+  Build cache is disabled
+Skipping task ':tauri-android:processReleaseManifest' as it is up-to-date.
+work action resolve AndroidManifest.xml (project :tauri-android) (Thread[#7821,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :app:stripUniversalReleaseDebugSymbols (Thread[#7821,Execution worker Thread 2,5,main]) started.
+:app:stripUniversalReleaseDebugSymbols (Thread[#7821,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:extractDeepLinksRelease (Thread[#7839,Execution worker Thread 19,5,main]) started.
+:tauri-plugin-opener:extractDeepLinksRelease (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :tauri-plugin-opener:extractDeepLinksRelease UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:extractDeepLinksRelease' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:extractDeepLinksRelease' as it is up-to-date.
+work action resolve navigation.json (project :tauri-plugin-opener) (Thread[#7832,Execution worker Thread 12,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:processReleaseManifest (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:tauri-plugin-opener:processReleaseManifest (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :tauri-plugin-opener:processReleaseManifest UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:processReleaseManifest' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:processReleaseManifest' as it is up-to-date.
+work action resolve AndroidManifest.xml (project :tauri-plugin-opener) (Thread[#7832,Execution worker Thread 12,5,main]) started.
+Resolve mutations for :app:processUniversalReleaseMainManifest (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:app:processUniversalReleaseMainManifest (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :app:processUniversalReleaseMainManifest UP-TO-DATE
+Caching disabled for task ':app:processUniversalReleaseMainManifest' because:
+  Build cache is disabled
+Skipping task ':app:processUniversalReleaseMainManifest' as it is up-to-date.
+Resolve mutations for :app:processUniversalReleaseManifest (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:app:processUniversalReleaseManifest (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :app:processUniversalReleaseManifest UP-TO-DATE
+Caching disabled for task ':app:processUniversalReleaseManifest' because:
+  Build cache is disabled
+Skipping task ':app:processUniversalReleaseManifest' as it is up-to-date.
+Resolve mutations for :app:processUniversalReleaseManifestForPackage (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:app:processUniversalReleaseManifestForPackage (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :app:processUniversalReleaseManifestForPackage UP-TO-DATE
+Custom actions are attached to task ':app:processUniversalReleaseManifestForPackage'.
+Caching disabled for task ':app:processUniversalReleaseManifestForPackage' because:
+  Build cache is disabled
+Skipping task ':app:processUniversalReleaseManifestForPackage' as it is up-to-date.
+Resolve mutations for :tauri-android:compileReleaseLibraryResources (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:tauri-android:compileReleaseLibraryResources (Thread[#7832,Execution worker Thread 12,5,main]) started.
+
+> Task :tauri-android:compileReleaseLibraryResources UP-TO-DATE
+Caching disabled for task ':tauri-android:compileReleaseLibraryResources' because:
+  Build cache is disabled
+Skipping task ':tauri-android:compileReleaseLibraryResources' as it is up-to-date.
+work action resolve out (project :tauri-android) (Thread[#7832,Execution worker Thread 12,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:compileReleaseLibraryResources (Thread[#7832,Execution worker Thread 12,5,main]) started.
+:tauri-plugin-opener:compileReleaseLibraryResources (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :tauri-plugin-opener:compileReleaseLibraryResources UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:compileReleaseLibraryResources' because:
+  Build cache is disabled
+Skipping task ':tauri-plugin-opener:compileReleaseLibraryResources' as it is up-to-date.
+work action resolve out (project :tauri-plugin-opener) (Thread[#7837,Execution worker Thread 17,5,main]) started.
+Resolve mutations for :app:processUniversalReleaseResources (Thread[#7837,Execution worker Thread 17,5,main]) started.
+:app:processUniversalReleaseResources (Thread[#7837,Execution worker Thread 17,5,main]) started.
+
+> Task :app:processUniversalReleaseResources UP-TO-DATE
+Caching disabled for task ':app:processUniversalReleaseResources' because:
+  Build cache is disabled
+Skipping task ':app:processUniversalReleaseResources' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:bundleLibCompileToJarRelease (Thread[#7837,Execution worker Thread 17,5,main]) started.
+:tauri-plugin-opener:bundleLibCompileToJarRelease (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :tauri-plugin-opener:bundleLibCompileToJarRelease UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:bundleLibCompileToJarRelease' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-plugin-opener:bundleLibCompileToJarRelease' as it is up-to-date.
+work action resolve classes.jar (project :tauri-plugin-opener) (Thread[#7829,Execution worker Thread 9,5,main]) started.
+Resolve mutations for :app:compileUniversalReleaseKotlin (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:app:compileUniversalReleaseKotlin (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :app:compileUniversalReleaseKotlin UP-TO-DATE
+Caching disabled for task ':app:compileUniversalReleaseKotlin' because:
+  Build cache is disabled
+Skipping task ':app:compileUniversalReleaseKotlin' as it is up-to-date.
+Resolve mutations for :app:javaPreCompileUniversalRelease (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:app:javaPreCompileUniversalRelease (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :app:javaPreCompileUniversalRelease UP-TO-DATE
+Caching disabled for task ':app:javaPreCompileUniversalRelease' because:
+  Build cache is disabled
+Skipping task ':app:javaPreCompileUniversalRelease' as it is up-to-date.
+Resolve mutations for :app:compileUniversalReleaseJavaWithJavac (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:app:compileUniversalReleaseJavaWithJavac (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :app:compileUniversalReleaseJavaWithJavac UP-TO-DATE
+Custom actions are attached to task ':app:compileUniversalReleaseJavaWithJavac'.
+Caching disabled for task ':app:compileUniversalReleaseJavaWithJavac' because:
+  Build cache is disabled
+Skipping task ':app:compileUniversalReleaseJavaWithJavac' as it is up-to-date.
+No compile result for :app:compileUniversalReleaseJavaWithJavac
+No compile result for :app:compileUniversalReleaseJavaWithJavac
+No compile result for :app:compileUniversalReleaseJavaWithJavac
+Resolve mutations for :tauri-android:prepareReleaseArtProfile (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:tauri-android:prepareReleaseArtProfile (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :tauri-android:prepareReleaseArtProfile UP-TO-DATE
+Caching disabled for task ':tauri-android:prepareReleaseArtProfile' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-android:prepareReleaseArtProfile' as it is up-to-date.
+work action resolve baseline-prof.txt (project :tauri-android) (Thread[#7829,Execution worker Thread 9,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:prepareReleaseArtProfile (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:tauri-plugin-opener:prepareReleaseArtProfile (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :app:stripUniversalReleaseDebugSymbols
+Caching disabled for task ':app:stripUniversalReleaseDebugSymbols' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:stripUniversalReleaseDebugSymbols' is not up-to-date because:
+  Input property 'inputDir' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/arm64-v8a/libtauri_app_lib.so has changed.
+  Input property 'inputDir' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/armeabi-v7a/libtauri_app_lib.so has changed.
+  Input property 'inputDir' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/x86/libtauri_app_lib.so has changed.
+  and more...
+
+> Task :tauri-plugin-opener:prepareReleaseArtProfile UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:prepareReleaseArtProfile' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-plugin-opener:prepareReleaseArtProfile' as it is up-to-date.
+work action resolve baseline-prof.txt (project :tauri-plugin-opener) (Thread[#7829,Execution worker Thread 9,5,main]) started.
+Resolve mutations for :app:extractUniversalReleaseNativeSymbolTables (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:app:extractUniversalReleaseNativeSymbolTables (Thread[#7829,Execution worker Thread 9,5,main]) started.
+Resolve mutations for :app:mergeUniversalReleaseArtProfile (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:app:mergeUniversalReleaseArtProfile (Thread[#7824,Execution worker Thread 5,5,main]) started.
+
+> Task :app:extractUniversalReleaseNativeSymbolTables
+Caching disabled for task ':app:extractUniversalReleaseNativeSymbolTables' because:
+  Build cache is disabled
+Task ':app:extractUniversalReleaseNativeSymbolTables' is not up-to-date because:
+  Input property 'inputDir' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/arm64-v8a/libtauri_app_lib.so has changed.
+  Input property 'inputDir' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/armeabi-v7a/libtauri_app_lib.so has changed.
+  Input property 'inputDir' file /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/x86/libtauri_app_lib.so has changed.
+  and more...
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /home/skpawar1305/Android/Sdk
+C/C++: Folder /home/skpawar1305/Android/Sdk/ndk/27.0.12077973 does not exist. Ignoring.
+C/C++: Folder /home/skpawar1305/Android/Sdk/ndk-bundle does not exist. Ignoring.
+Unable to extract native debug metadata from /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/x86_64/libtauri_app_lib.so because the native debug metadata has already been stripped.
+Unable to extract native debug metadata from /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/arm64-v8a/libtauri_app_lib.so because the native debug metadata has already been stripped.
+Unable to extract native debug metadata from /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/x86/libtauri_app_lib.so because the native debug metadata has already been stripped.
+Unable to extract native debug metadata from /home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib/armeabi-v7a/libtauri_app_lib.so because the native debug metadata has already been stripped.
+
+> Task :app:mergeUniversalReleaseArtProfile UP-TO-DATE
+Caching disabled for task ':app:mergeUniversalReleaseArtProfile' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeUniversalReleaseArtProfile' as it is up-to-date.
+Resolve mutations for :app:mergeUniversalReleaseNativeDebugMetadata (Thread[#7824,Execution worker Thread 5,5,main]) started.
+:app:mergeUniversalReleaseNativeDebugMetadata (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :app:mergeUniversalReleaseNativeDebugMetadata NO-SOURCE
+Skipping task ':app:mergeUniversalReleaseNativeDebugMetadata' as it has no source files and no previous output files.
+Resolve mutations for :tauri-android:bundleLibRuntimeToJarRelease (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:tauri-android:bundleLibRuntimeToJarRelease (Thread[#7829,Execution worker Thread 9,5,main]) started.
+
+> Task :tauri-android:bundleLibRuntimeToJarRelease UP-TO-DATE
+Caching disabled for task ':tauri-android:bundleLibRuntimeToJarRelease' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-android:bundleLibRuntimeToJarRelease' as it is up-to-date.
+work action resolve classes.jar (project :tauri-android) (Thread[#7838,Execution worker Thread 18,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:bundleLibRuntimeToJarRelease (Thread[#7835,Execution worker Thread 15,5,main]) started.
+:tauri-plugin-opener:bundleLibRuntimeToJarRelease (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :tauri-plugin-opener:bundleLibRuntimeToJarRelease UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:bundleLibRuntimeToJarRelease' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-plugin-opener:bundleLibRuntimeToJarRelease' as it is up-to-date.
+work action resolve classes.jar (project :tauri-plugin-opener) (Thread[#7836,Execution worker Thread 16,5,main]) started.
+Resolve mutations for :app:expandUniversalReleaseArtProfileWildcards (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:expandUniversalReleaseArtProfileWildcards (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:expandUniversalReleaseArtProfileWildcards UP-TO-DATE
+Caching disabled for task ':app:expandUniversalReleaseArtProfileWildcards' because:
+  Build cache is disabled
+Skipping task ':app:expandUniversalReleaseArtProfileWildcards' as it is up-to-date.
+Resolve mutations for :app:extractProguardFiles (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:extractProguardFiles (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:extractProguardFiles UP-TO-DATE
+Caching disabled for task ':app:extractProguardFiles' because:
+  Build cache is disabled
+  Fast task
+Skipping task ':app:extractProguardFiles' as it is up-to-date.
+Resolve mutations for :app:mergeUniversalReleaseGeneratedProguardFiles (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:mergeUniversalReleaseGeneratedProguardFiles (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:mergeUniversalReleaseGeneratedProguardFiles UP-TO-DATE
+Caching disabled for task ':app:mergeUniversalReleaseGeneratedProguardFiles' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeUniversalReleaseGeneratedProguardFiles' as it is up-to-date.
+Resolve mutations for :app:processUniversalReleaseJavaRes (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:processUniversalReleaseJavaRes (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:processUniversalReleaseJavaRes UP-TO-DATE
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/resources', not found
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/universal/resources', not found
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/release/resources', not found
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/universalRelease/resources', not found
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/resources', not found
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/universal/resources', not found
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/release/resources', not found
+file or directory '/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/universalRelease/resources', not found
+Caching disabled for task ':app:processUniversalReleaseJavaRes' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:processUniversalReleaseJavaRes' as it is up-to-date.
+Resolve mutations for :tauri-android:processReleaseJavaRes (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:tauri-android:processReleaseJavaRes (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :tauri-android:processReleaseJavaRes UP-TO-DATE
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.2/mobile/android/src/main/resources', not found
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.2/mobile/android/src/release/resources', not found
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.2/mobile/android/src/main/resources', not found
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.10.2/mobile/android/src/release/resources', not found
+Caching disabled for task ':tauri-android:processReleaseJavaRes' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-android:processReleaseJavaRes' as it is up-to-date.
+work action resolve out (project :tauri-android) (Thread[#7836,Execution worker Thread 16,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:processReleaseJavaRes (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:tauri-plugin-opener:processReleaseJavaRes (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :tauri-plugin-opener:processReleaseJavaRes UP-TO-DATE
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-plugin-opener-2.5.3/android/src/main/resources', not found
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-plugin-opener-2.5.3/android/src/release/resources', not found
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-plugin-opener-2.5.3/android/src/main/resources', not found
+file or directory '/home/skpawar1305/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-plugin-opener-2.5.3/android/src/release/resources', not found
+Caching disabled for task ':tauri-plugin-opener:processReleaseJavaRes' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':tauri-plugin-opener:processReleaseJavaRes' as it is up-to-date.
+work action resolve out (project :tauri-plugin-opener) (Thread[#7836,Execution worker Thread 16,5,main]) started.
+Resolve mutations for :app:mergeUniversalReleaseJavaResource (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:mergeUniversalReleaseJavaResource (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:mergeUniversalReleaseJavaResource UP-TO-DATE
+Caching disabled for task ':app:mergeUniversalReleaseJavaResource' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:mergeUniversalReleaseJavaResource' as it is up-to-date.
+Resolve mutations for :app:mergeUniversalReleaseStartupProfile (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:mergeUniversalReleaseStartupProfile (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:mergeUniversalReleaseStartupProfile UP-TO-DATE
+Caching disabled for task ':app:mergeUniversalReleaseStartupProfile' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeUniversalReleaseStartupProfile' as it is up-to-date.
+Resolve mutations for :app:minifyUniversalReleaseWithR8 (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:minifyUniversalReleaseWithR8 (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:minifyUniversalReleaseWithR8 UP-TO-DATE
+Caching disabled for task ':app:minifyUniversalReleaseWithR8' because:
+  Build cache is disabled
+Skipping task ':app:minifyUniversalReleaseWithR8' as it is up-to-date.
+Resolve mutations for :app:compileUniversalReleaseArtProfile (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:compileUniversalReleaseArtProfile (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:compileUniversalReleaseArtProfile UP-TO-DATE
+Caching disabled for task ':app:compileUniversalReleaseArtProfile' because:
+  Build cache is disabled
+Skipping task ':app:compileUniversalReleaseArtProfile' as it is up-to-date.
+Resolve mutations for :app:mergeUniversalReleaseShaders (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:mergeUniversalReleaseShaders (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:mergeUniversalReleaseShaders UP-TO-DATE
+Caching disabled for task ':app:mergeUniversalReleaseShaders' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeUniversalReleaseShaders' as it is up-to-date.
+Resolve mutations for :app:compileUniversalReleaseShaders (Thread[#7836,Execution worker Thread 16,5,main]) started.
+:app:compileUniversalReleaseShaders (Thread[#7836,Execution worker Thread 16,5,main]) started.
+
+> Task :app:compileUniversalReleaseShaders NO-SOURCE
+Skipping task ':app:compileUniversalReleaseShaders' as it has no source files and no previous output files.
+Resolve mutations for :app:generateUniversalReleaseAssets (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:app:generateUniversalReleaseAssets (Thread[#7823,Execution worker Thread 4,5,main]) started.
+
+> Task :app:generateUniversalReleaseAssets UP-TO-DATE
+Skipping task ':app:generateUniversalReleaseAssets' as it has no actions.
+Resolve mutations for :tauri-android:mergeReleaseShaders (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:tauri-android:mergeReleaseShaders (Thread[#7823,Execution worker Thread 4,5,main]) started.
+
+> Task :tauri-android:mergeReleaseShaders UP-TO-DATE
+Caching disabled for task ':tauri-android:mergeReleaseShaders' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-android:mergeReleaseShaders' as it is up-to-date.
+Resolve mutations for :tauri-android:compileReleaseShaders (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:tauri-android:compileReleaseShaders (Thread[#7823,Execution worker Thread 4,5,main]) started.
+
+> Task :tauri-android:compileReleaseShaders NO-SOURCE
+Skipping task ':tauri-android:compileReleaseShaders' as it has no source files and no previous output files.
+Resolve mutations for :tauri-android:generateReleaseAssets (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:tauri-android:generateReleaseAssets (Thread[#7823,Execution worker Thread 4,5,main]) started.
+
+> Task :tauri-android:generateReleaseAssets UP-TO-DATE
+Skipping task ':tauri-android:generateReleaseAssets' as it has no actions.
+Resolve mutations for :tauri-android:mergeReleaseAssets (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:tauri-android:mergeReleaseAssets (Thread[#7823,Execution worker Thread 4,5,main]) started.
+
+> Task :tauri-android:mergeReleaseAssets UP-TO-DATE
+Caching disabled for task ':tauri-android:mergeReleaseAssets' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-android:mergeReleaseAssets' as it is up-to-date.
+work action resolve mergeReleaseAssets (project :tauri-android) (Thread[#7823,Execution worker Thread 4,5,main]) started.
+Resolve mutations for :tauri-plugin-opener:mergeReleaseShaders (Thread[#7823,Execution worker Thread 4,5,main]) started.
+:tauri-plugin-opener:mergeReleaseShaders (Thread[#7823,Execution worker Thread 4,5,main]) started.
+
+> Task :tauri-plugin-opener:mergeReleaseShaders UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:mergeReleaseShaders' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-plugin-opener:mergeReleaseShaders' as it is up-to-date.
+Resolve mutations for :tauri-plugin-opener:compileReleaseShaders (Thread[#7829,Execution worker Thread 9,5,main]) started.
+:tauri-plugin-opener:compileReleaseShaders (Thread[#7831,Execution worker Thread 11,5,main]) started.
+
+> Task :tauri-plugin-opener:compileReleaseShaders NO-SOURCE
+Skipping task ':tauri-plugin-opener:compileReleaseShaders' as it has no source files and no previous output files.
+Resolve mutations for :tauri-plugin-opener:generateReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+:tauri-plugin-opener:generateReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+
+> Task :tauri-plugin-opener:generateReleaseAssets UP-TO-DATE
+Skipping task ':tauri-plugin-opener:generateReleaseAssets' as it has no actions.
+Resolve mutations for :tauri-plugin-opener:mergeReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+:tauri-plugin-opener:mergeReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+
+> Task :tauri-plugin-opener:mergeReleaseAssets UP-TO-DATE
+Caching disabled for task ':tauri-plugin-opener:mergeReleaseAssets' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':tauri-plugin-opener:mergeReleaseAssets' as it is up-to-date.
+work action resolve mergeReleaseAssets (project :tauri-plugin-opener) (Thread[#7833,Execution worker Thread 13,5,main]) started.
+Resolve mutations for :app:mergeUniversalReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+:app:mergeUniversalReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+
+> Task :app:mergeUniversalReleaseAssets UP-TO-DATE
+Caching disabled for task ':app:mergeUniversalReleaseAssets' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeUniversalReleaseAssets' as it is up-to-date.
+Resolve mutations for :app:compressUniversalReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+:app:compressUniversalReleaseAssets (Thread[#7833,Execution worker Thread 13,5,main]) started.
+
+> Task :app:compressUniversalReleaseAssets UP-TO-DATE
+Caching disabled for task ':app:compressUniversalReleaseAssets' because:
+  Build cache is disabled
+Skipping task ':app:compressUniversalReleaseAssets' as it is up-to-date.
+Resolve mutations for :app:extractUniversalReleaseVersionControlInfo (Thread[#7838,Execution worker Thread 18,5,main]) started.
+:app:extractUniversalReleaseVersionControlInfo (Thread[#7838,Execution worker Thread 18,5,main]) started.
+
+> Task :app:extractUniversalReleaseVersionControlInfo UP-TO-DATE
+Caching disabled for task ':app:extractUniversalReleaseVersionControlInfo' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:extractUniversalReleaseVersionControlInfo' as it is up-to-date.
+Resolve mutations for :app:optimizeUniversalReleaseResources (Thread[#7838,Execution worker Thread 18,5,main]) started.
+:app:optimizeUniversalReleaseResources (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:optimizeUniversalReleaseResources UP-TO-DATE
+Custom actions are attached to task ':app:optimizeUniversalReleaseResources'.
+Caching disabled for task ':app:optimizeUniversalReleaseResources' because:
+  Build cache is disabled
+Skipping task ':app:optimizeUniversalReleaseResources' as it is up-to-date.
+Resolve mutations for :app:collectUniversalReleaseDependencies (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:collectUniversalReleaseDependencies (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:collectUniversalReleaseDependencies UP-TO-DATE
+Caching disabled for task ':app:collectUniversalReleaseDependencies' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:collectUniversalReleaseDependencies' as it is up-to-date.
+Resolve mutations for :app:sdkUniversalReleaseDependencyData (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:sdkUniversalReleaseDependencyData (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:sdkUniversalReleaseDependencyData UP-TO-DATE
+Caching disabled for task ':app:sdkUniversalReleaseDependencyData' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:sdkUniversalReleaseDependencyData' as it is up-to-date.
+Resolve mutations for :app:writeUniversalReleaseAppMetadata (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:writeUniversalReleaseAppMetadata (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:writeUniversalReleaseAppMetadata UP-TO-DATE
+Caching disabled for task ':app:writeUniversalReleaseAppMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:writeUniversalReleaseAppMetadata' as it is up-to-date.
+Resolve mutations for :app:writeUniversalReleaseSigningConfigVersions (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:writeUniversalReleaseSigningConfigVersions (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:writeUniversalReleaseSigningConfigVersions UP-TO-DATE
+Caching disabled for task ':app:writeUniversalReleaseSigningConfigVersions' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:writeUniversalReleaseSigningConfigVersions' as it is up-to-date.
+Resolve mutations for :app:packageUniversalRelease (Thread[#7826,Execution worker Thread 7,5,main]) started.
+:app:packageUniversalRelease (Thread[#7826,Execution worker Thread 7,5,main]) started.
+
+> Task :app:packageUniversalRelease FAILED
+Custom actions are attached to task ':app:packageUniversalRelease'.
+Caching disabled for task ':app:packageUniversalRelease' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:packageUniversalRelease' is not up-to-date because:
+  Task has failed previously.
+The input changes require a full rebuild for incremental task ':app:packageUniversalRelease'.
+Could not execute [report metric STATISTICS_COLLECT_METRICS_OVERHEAD]
+Could not execute [report metric STATISTICS_COLLECT_METRICS_OVERHEAD]
+
+[Incubating] Problems report is available at: file:///home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:packageUniversalRelease'.
+> A failure occurred while executing com.android.build.gradle.tasks.PackageAndroidArtifact$IncrementalSplitterRunnable
+   > SigningConfig "release" is missing required property "storeFile".
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 57s
+97 actionable tasks: 12 executed, 85 up-to-date
+failed to build APK: Failed to assemble APK with Io(BeforeSpawn(<closure>), Io(StderrFile(File { fd: 27, path: "/home/skpawar1305/Desktop/airhockey_multiplayer/build_output.log", read: false, write: true }), Io(StdoutFile(File { fd: 26, path: "/home/skpawar1305/Desktop/airhockey_multiplayer/build_output.log", read: false, write: true }), Io(StdinFile(File { fd: 25, path: "/dev/pts/2", read: true, write: true }), Io(Env("WRY_ANDROID_KOTLIN_FILES_OUT_DIR", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/java/com/skpawar1305/airhockey/generated"), Io(Env("TAURI_CLI_VERBOSITY", "1"), Io(Env("CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang"), Io(Env("CARGO_TARGET_I686_LINUX_ANDROID_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang"), Io(Env("CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Io(Env("PATH", "/home/skpawar1305/Desktop/airhockey_multiplayer/node_modules/.bin:/home/skpawar1305/Desktop/airhockey_multiplayer/node_modules/.bin:/home/skpawar1305/Desktop/node_modules/.bin:/home/skpawar1305/node_modules/.bin:/home/node_modules/.bin:/node_modules/.bin:/home/skpawar1305/.nvm/versions/node/v22.19.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/home/skpawar1305/.pixi/bin:/home/skpawar1305/.pixi/bin:/home/skpawar1305/.nvm/versions/node/v22.19.0/bin:/home/skpawar1305/.cargo/bin:/home/skpawar1305/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:energy/cli:/home/skpawar1305/android-studio/bin:/home/skpawar1305/flutter/bin:/usr/local/go/bin:/home/skpawar1305/go/bin:/home/skpawar1305/.pub-cache/bin:energy/cli:/home/skpawar1305/android-studio/bin:/home/skpawar1305/flutter/bin:/usr/local/go/bin:/home/skpawar1305/go/bin:/home/skpawar1305/.pub-cache/bin:energy/cli"), Io(Env("RUST_LOG_STYLE", "always"), Io(Env("WRY_ANDROID_LIBRARY", "tauri_app_lib"), Io(Env("CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"), Io(Env("TAURI_ANDROID_PACKAGE_UNESCAPED", "com.skpawar1305.airhockey"), Io(Env("TAURI_ANDROID_PROJECT_PATH", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android"), Io(Env("HOME", "/home/skpawar1305"), Io(Env("NDK_HOME", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358"), Io(Env("CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Io(Env("CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"), Io(Env("SSH_AUTH_SOCK", "/run/user/1000/keyring/ssh"), Io(Env("TERM", "xterm-256color"), Io(Env("ANDROID_HOME", "/home/skpawar1305/Android/Sdk"), Io(Env("CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Io(Env("WRY_ANDROID_PACKAGE", "com.skpawar1305.airhockey"), Io(Env("CARGO_TARGET_I686_LINUX_ANDROID_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Cmd(["/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/gradlew", "--project-dir", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android"])))))))))))))))))))))))))): command ["/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/gradlew", "--project-dir", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android"] exited with code 1
+       Error [tauri_cli_node] failed to build APK: Failed to assemble APK with Io(BeforeSpawn(<closure>), Io(StderrFile(File { fd: 27, path: "/home/skpawar1305/Desktop/airhockey_multiplayer/build_output.log", read: false, write: true }), Io(StdoutFile(File { fd: 26, path: "/home/skpawar1305/Desktop/airhockey_multiplayer/build_output.log", read: false, write: true }), Io(StdinFile(File { fd: 25, path: "/dev/pts/2", read: true, write: true }), Io(Env("WRY_ANDROID_KOTLIN_FILES_OUT_DIR", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/app/src/main/java/com/skpawar1305/airhockey/generated"), Io(Env("TAURI_CLI_VERBOSITY", "1"), Io(Env("CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang"), Io(Env("CARGO_TARGET_I686_LINUX_ANDROID_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang"), Io(Env("CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Io(Env("PATH", "/home/skpawar1305/Desktop/airhockey_multiplayer/node_modules/.bin:/home/skpawar1305/Desktop/airhockey_multiplayer/node_modules/.bin:/home/skpawar1305/Desktop/node_modules/.bin:/home/skpawar1305/node_modules/.bin:/home/node_modules/.bin:/node_modules/.bin:/home/skpawar1305/.nvm/versions/node/v22.19.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/home/skpawar1305/.pixi/bin:/home/skpawar1305/.pixi/bin:/home/skpawar1305/.nvm/versions/node/v22.19.0/bin:/home/skpawar1305/.cargo/bin:/home/skpawar1305/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:energy/cli:/home/skpawar1305/android-studio/bin:/home/skpawar1305/flutter/bin:/usr/local/go/bin:/home/skpawar1305/go/bin:/home/skpawar1305/.pub-cache/bin:energy/cli:/home/skpawar1305/android-studio/bin:/home/skpawar1305/flutter/bin:/usr/local/go/bin:/home/skpawar1305/go/bin:/home/skpawar1305/.pub-cache/bin:energy/cli"), Io(Env("RUST_LOG_STYLE", "always"), Io(Env("WRY_ANDROID_LIBRARY", "tauri_app_lib"), Io(Env("CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"), Io(Env("TAURI_ANDROID_PACKAGE_UNESCAPED", "com.skpawar1305.airhockey"), Io(Env("TAURI_ANDROID_PROJECT_PATH", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android"), Io(Env("HOME", "/home/skpawar1305"), Io(Env("NDK_HOME", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358"), Io(Env("CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Io(Env("CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER", "/home/skpawar1305/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"), Io(Env("SSH_AUTH_SOCK", "/run/user/1000/keyring/ssh"), Io(Env("TERM", "xterm-256color"), Io(Env("ANDROID_HOME", "/home/skpawar1305/Android/Sdk"), Io(Env("CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Io(Env("WRY_ANDROID_PACKAGE", "com.skpawar1305.airhockey"), Io(Env("CARGO_TARGET_I686_LINUX_ANDROID_RUSTFLAGS", "-Clink-arg=-landroid -Clink-arg=-llog -Clink-arg=-lOpenSLES"), Cmd(["/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/gradlew", "--project-dir", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android"])))))))))))))))))))))))))): command ["/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android/gradlew", "--project-dir", "/home/skpawar1305/Desktop/airhockey_multiplayer/src-tauri/gen/android"] exited with code 1

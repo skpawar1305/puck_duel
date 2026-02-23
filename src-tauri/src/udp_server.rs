@@ -2,54 +2,58 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
-use tauri::{State, Emitter};
+use tokio::sync::broadcast;
+use tauri::{State, Emitter, Manager};
 use local_ip_address::local_ip;
 
 pub struct UdpState {
     pub is_running: Mutex<bool>,
     pub host_socket: Mutex<Option<Arc<UdpSocket>>>,
     pub client_socket: Mutex<Option<Arc<UdpSocket>>>,
-    pub client_remote_addr: Mutex<Option<SocketAddr>>, // For client to know where to send to Host
-    pub connected_clients: Mutex<HashMap<SocketAddr, ()>>, // Host tracks clients
+    pub client_remote_addr: Mutex<Option<SocketAddr>>,
+    pub connected_clients: Arc<Mutex<HashMap<SocketAddr, ()>>>,
+    /// Receive tasks publish here; game loop subscribes — no socket race
+    pub msg_tx: broadcast::Sender<String>,
 }
 
-// ----------------------------------------------------
-// HOST LOGIC (Server)
-// ----------------------------------------------------
+impl UdpState {
+    pub fn new() -> Self {
+        let (tx, _) = broadcast::channel(16);
+        Self {
+            is_running: Mutex::new(false),
+            host_socket: Mutex::new(None),
+            client_socket: Mutex::new(None),
+            client_remote_addr: Mutex::new(None),
+            connected_clients: Arc::new(Mutex::new(HashMap::new())),
+            msg_tx: tx,
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn start_udp_host(app: tauri::AppHandle, state: State<'_, UdpState>) -> Result<String, String> {
     {
         let mut is_running = state.is_running.lock().unwrap();
-        if *is_running {
-            return Ok("Host already running".to_string());
-        }
+        if *is_running { return Ok("Host already running".to_string()); }
         *is_running = true;
     }
 
-    // Bind on all interfaces
-    let socket = UdpSocket::bind("0.0.0.0:8080").await.map_err(|e| e.to_string())?;
-    let socket = Arc::new(socket);
-    
-    // Store in state so we can send from UI
+    let socket = Arc::new(UdpSocket::bind("0.0.0.0:8080").await.map_err(|e| e.to_string())?);
     *state.host_socket.lock().unwrap() = Some(socket.clone());
 
-    let state_clients = Arc::new(Mutex::new(HashMap::new()));
-    
-    // Wait for incoming UDP packets
+    let tx        = state.msg_tx.clone();
+    let clients   = state.connected_clients.clone();
+
     tokio::spawn(async move {
-        let mut buf = [0; 1024];
+        let mut buf = [0u8; 1024];
         loop {
             if let Ok((len, addr)) = socket.recv_from(&mut buf).await {
-                // Register client if not seen
-                let mut clients = state_clients.lock().unwrap();
-                if !clients.contains_key(&addr) {
-                    clients.insert(addr, ());
-                }
-
+                clients.lock().unwrap().entry(addr).or_insert(());
                 let msg = String::from_utf8_lossy(&buf[..len]).to_string();
-                
-                // Emit event to Svelte layer
-                let _ = app.emit("udp-msg-received", (addr.to_string(), msg));
+                // JS still needs this for connection detection on the host screen
+                let _ = app.emit("udp-msg-received", (addr.to_string(), msg.clone()));
+                // game loop subscribes here — zero IPC for game state
+                let _ = tx.send(msg);
             }
         }
     });
@@ -59,42 +63,34 @@ pub async fn start_udp_host(app: tauri::AppHandle, state: State<'_, UdpState>) -
 
 #[tauri::command]
 pub async fn host_send_msg(state: State<'_, UdpState>, msg: String) -> Result<(), String> {
-    let socket_opt = state.host_socket.lock().unwrap().clone();
+    let socket  = state.host_socket.lock().unwrap().clone();
     let clients = state.connected_clients.lock().unwrap().clone();
-    
-    if let Some(socket) = socket_opt {
-        for (addr, _) in clients.iter() {
-            let _ = socket.send_to(msg.as_bytes(), addr).await;
+    if let Some(sock) = socket {
+        for addr in clients.keys() {
+            let _ = sock.send_to(msg.as_bytes(), addr).await;
         }
     }
     Ok(())
 }
 
-// ----------------------------------------------------
-// CLIENT LOGIC
-// ----------------------------------------------------
 #[tauri::command]
 pub async fn connect_udp_client(app: tauri::AppHandle, state: State<'_, UdpState>, host_ip: String) -> Result<String, String> {
-    // Bind to any ephemeral port
-    let socket = UdpSocket::bind("0.0.0.0:0").await.map_err(|e| e.to_string())?;
-    let socket = Arc::new(socket);
-    
+    let socket    = Arc::new(UdpSocket::bind("0.0.0.0:0").await.map_err(|e| e.to_string())?);
     let host_addr: SocketAddr = format!("{}:8080", host_ip).parse().map_err(|_| "Invalid IP")?;
-    
-    *state.client_socket.lock().unwrap() = Some(socket.clone());
+
+    *state.client_socket.lock().unwrap()      = Some(socket.clone());
     *state.client_remote_addr.lock().unwrap() = Some(host_addr);
 
-    // Initial ping to punch hole / register with host
-    let ping_msg = r#"{"type":"ping"}"#;
-    socket.send_to(ping_msg.as_bytes(), &host_addr).await.map_err(|e| e.to_string())?;
+    socket.send_to(r#"{"type":"ping"}"#.as_bytes(), &host_addr).await.map_err(|e| e.to_string())?;
 
-    // Wait for incoming from Host
+    let tx = state.msg_tx.clone();
     tokio::spawn(async move {
-        let mut buf = [0; 1024];
+        let mut buf = [0u8; 1024];
         loop {
-            if let Ok((len, _addr)) = socket.recv_from(&mut buf).await {
+            if let Ok((len, _)) = socket.recv_from(&mut buf).await {
                 let msg = String::from_utf8_lossy(&buf[..len]).to_string();
-                let _ = app.emit("udp-msg-received", ("host".to_string(), msg));
+                let _ = app.emit("udp-msg-received", ("host".to_string(), msg.clone()));
+                let _ = tx.send(msg);
             }
         }
     });
@@ -104,22 +100,34 @@ pub async fn connect_udp_client(app: tauri::AppHandle, state: State<'_, UdpState
 
 #[tauri::command]
 pub async fn client_send_msg(state: State<'_, UdpState>, msg: String) -> Result<(), String> {
-    let socket_opt = state.client_socket.lock().unwrap().clone();
-    let host_addr = state.client_remote_addr.lock().unwrap().clone();
-    
-    if let (Some(socket), Some(addr)) = (socket_opt, host_addr) {
-        let _ = socket.send_to(msg.as_bytes(), &addr).await;
+    let socket = state.client_socket.lock().unwrap().clone();
+    let addr   = state.client_remote_addr.lock().unwrap().clone();
+    if let (Some(sock), Some(a)) = (socket, addr) {
+        let _ = sock.send_to(msg.as_bytes(), &a).await;
     }
     Ok(())
 }
 
-// ----------------------------------------------------
-// UTILS
-// ----------------------------------------------------
 #[tauri::command]
-pub fn get_local_ip() -> Result<String, String> {
-    match local_ip() {
-        Ok(ip) => Ok(ip.to_string()),
-        Err(e) => Err(format!("Failed to get local IP: {}", e)),
+pub fn get_local_ips() -> Result<Vec<String>, String> {
+    use local_ip_address::list_afinet_netifas;
+    let mut ips = Vec::new();
+    if let Ok(ifaces) = list_afinet_netifas() {
+        for (name, ip) in &ifaces {
+            if !ip.is_ipv4() || ip.is_loopback() { continue; }
+            if name.starts_with("docker") || name.starts_with("br-")
+            || name.starts_with("veth")   || name.starts_with("tun")
+            || name.starts_with("tap")    || name.starts_with("vmnet") { continue; }
+            let octets = match ip { std::net::IpAddr::V4(v4) => v4.octets(), _ => continue };
+            let private = octets[0] == 10
+                || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+                || (octets[0] == 192 && octets[1] == 168);
+            if !private { continue; }
+            ips.push(ip.to_string());
+        }
     }
+    if ips.is_empty() {
+        ips.push(local_ip().map_err(|e| e.to_string())?.to_string());
+    }
+    Ok(ips)
 }

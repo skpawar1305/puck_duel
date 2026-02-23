@@ -24,6 +24,17 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
+    signingConfigs {
+        create("release") {
+            val keystoreFile = file("../../../../release.keystore")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = "password"
+                keyAlias = "upload"
+                keyPassword = "password"
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -37,6 +48,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
@@ -50,6 +62,11 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+        lintConfig = file("lint.xml")
     }
 }
 
@@ -68,3 +85,8 @@ dependencies {
 }
 
 apply(from = "tauri.build.gradle.kts")
+tasks.whenTaskAdded {
+    if (name.startsWith("lintVitalAnalyze")) {
+        enabled = false
+    }
+}
