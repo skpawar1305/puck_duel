@@ -278,6 +278,9 @@ impl GameState {
             // Speed clamp (max only)
             let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
             if cs > MAX_SPEED { self.puck.vx=self.puck.vx/cs*MAX_SPEED; self.puck.vy=self.puck.vy/cs*MAX_SPEED; }
+        } else if auth_now {
+            // Auth but in countdown: puck already at center from reset_puck(), hold it there.
+            // Do NOT blend toward target_puck — it may be stale from before the goal.
         } else {
             // Dead reckoning — blend toward peer's authoritative state
             self.puck.x += self.puck.vx * dt;
@@ -294,10 +297,11 @@ impl GameState {
                 if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; }
                 else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; }
             }
-            // Puck passed a goal — reset locally so it doesn't fly off screen
-            // while waiting for the authoritative reset message (up to 100ms away)
+            // Puck passed a goal — snap locally to center immediately,
+            // and zero target_puck so the blend doesn't re-apply the old velocity.
             if self.puck.y < -20.0 || self.puck.y > TH + 20.0 {
                 self.reset_puck();
+                self.target_puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
             }
 
             // Blend toward authoritative peer state
