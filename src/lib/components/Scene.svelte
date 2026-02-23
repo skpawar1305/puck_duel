@@ -357,6 +357,7 @@
                 }
 
                 // Goals
+                let goalScored = false;
                 if (pTrans.z > 5.4) {
                     score[1]++;
                     playGoal();
@@ -369,8 +370,10 @@
                     setTimeout(() => {
                         scoreFlash = [scoreFlash[0], false];
                     }, 700);
-                    puckRigidBody.setTranslation({ x: 0, y: 0.1, z: 0 }, true);
+                    puckRigidBody.setTranslation({ x: 0, y: 0.1, z: 2.5 }, true);
                     puckRigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                    puckPos = [0, 0.1, 2.5];
+                    goalScored = true;
                 } else if (pTrans.z < -5.4) {
                     score[0]++;
                     playGoal();
@@ -383,11 +386,14 @@
                     setTimeout(() => {
                         scoreFlash = [false, scoreFlash[1]];
                     }, 700);
-                    puckRigidBody.setTranslation({ x: 0, y: 0.1, z: 0 }, true);
+                    puckRigidBody.setTranslation({ x: 0, y: 0.1, z: -2.5 }, true);
                     puckRigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                    puckPos = [0, 0.1, -2.5];
+                    goalScored = true;
                 }
 
                 // Speed limits — keep the game lively
+                if (!goalScored) {
                 const curVel = puckRigidBody.linvel();
                 const curSpeed = Math.sqrt(curVel.x ** 2 + curVel.z ** 2);
                 if (curSpeed > 0.3 && curSpeed < 3) {
@@ -403,8 +409,9 @@
                         true,
                     );
                 }
+                }
 
-                puckPos = [pTrans.x, 0.1, pTrans.z];
+                if (!goalScored) puckPos = [pTrans.x, 0.1, pTrans.z];
             } else {
                 // Non-authoritative Interpolation
                 const t = puckRigidBody.translation();

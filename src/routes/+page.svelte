@@ -3,7 +3,7 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import Game from "$lib/components/Game.svelte";
   import QRScanner from "$lib/components/QRScanner.svelte";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, flushSync } from "svelte";
   import QRCode from "qrcode";
   import { initAudio } from "$lib/audio";
 
@@ -72,7 +72,7 @@
     unlisten = await listen<[string, string]>("udp-msg-received", (event) => {
       // If we are Host waiting on QR Code screen, any ping payload means client joined
       if (isHost && screen === "host") {
-        screen = "game";
+        flushSync(() => { screen = "game"; });
       }
     });
   });
