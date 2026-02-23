@@ -1,0 +1,40 @@
+{
+  "name": "tauri-app",
+  "version": "0.1.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "tauri": "tauri"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@tailwindcss/vite": "^4.2.0",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@threlte/core": "^8.4.0",
+    "@threlte/extras": "^9.8.1",
+    "@threlte/rapier": "^3.3.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/three": "^0.183.1",
+    "html5-qrcode": "^2.3.8",
+    "qrcode": "^1.5.4",
+    "tailwindcss": "^4.2.0",
+    "three": "^0.183.1"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.6",
+    "@sveltejs/kit": "^2.9.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tauri-apps/cli": "^2",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3"
+  }
+}
