@@ -18,7 +18,7 @@ android {
     namespace = "com.skpawar1305.airhockey"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.skpawar1305.airhockey"
+        applicationId = "com.dano.puckduel"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

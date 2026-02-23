@@ -86,79 +86,76 @@
   class="w-screen h-screen bg-neutral-900 text-white flex flex-col items-center justify-center overflow-hidden"
 >
   {#if screen === "menu"}
-    <div class="flex flex-col gap-6 items-center">
-      <h1
-        class="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-8"
-      >
-        Air Hockey VR
-      </h1>
+    <div class="flex flex-col gap-5 items-center px-8 w-full max-w-sm">
+      <div class="flex flex-col items-center mb-6">
+        <div class="text-5xl mb-3">🏒</div>
+        <h1 class="text-4xl font-black tracking-tight bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+          Air Hockey
+        </h1>
+        <p class="text-neutral-500 text-sm mt-1 tracking-widest uppercase">First to 6 wins</p>
+      </div>
       <button
-        class="px-8 py-4 bg-blue-600 text-white rounded-2xl text-xl font-bold hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all uppercase tracking-widest min-w-48"
+        class="w-full py-4 bg-blue-600 text-white rounded-2xl text-lg font-bold hover:bg-blue-500 active:scale-95 shadow-[0_0_24px_rgba(37,99,235,0.4)] transition-all uppercase tracking-widest"
         onclick={startHost}
-      >
-        Host Game
-      </button>
+      >🌐 Host Game</button>
       <button
-        class="px-8 py-4 bg-purple-600 text-white rounded-2xl text-xl font-bold hover:bg-purple-500 shadow-[0_0_20px_rgba(147,51,234,0.5)] transition-all uppercase tracking-widest min-w-48"
-        onclick={startSinglePlayer}
-      >
-        Single Player
-      </button>
-      <button
-        class="px-8 py-4 bg-emerald-600 text-white rounded-2xl text-xl font-bold hover:bg-emerald-500 shadow-[0_0_20px_rgba(5,150,105,0.5)] transition-all uppercase tracking-widest min-w-48"
+        class="w-full py-4 bg-emerald-600 text-white rounded-2xl text-lg font-bold hover:bg-emerald-500 active:scale-95 shadow-[0_0_24px_rgba(5,150,105,0.4)] transition-all uppercase tracking-widest"
         onclick={startJoin}
-      >
-        Join Game
-      </button>
+      >📷 Join Game</button>
+      <button
+        class="w-full py-4 bg-purple-600 text-white rounded-2xl text-lg font-bold hover:bg-purple-500 active:scale-95 shadow-[0_0_24px_rgba(147,51,234,0.4)] transition-all uppercase tracking-widest"
+        onclick={startSinglePlayer}
+      >🤖 vs AI</button>
     </div>
   {:else if screen === "host"}
-    <div
-      class="flex flex-col gap-6 items-center text-center p-8 bg-neutral-800 rounded-3xl shadow-2xl"
-    >
-      <h2 class="text-2xl font-bold text-cyan-400">Waiting for Opponent...</h2>
-      <p class="text-neutral-400">Scan this QR code from the other device</p>
+    <div class="flex flex-col gap-5 items-center text-center p-8 w-full max-w-sm">
+      <div class="text-3xl animate-pulse">⏳</div>
+      <h2 class="text-2xl font-black text-cyan-400">Waiting for opponent…</h2>
+      <p class="text-neutral-500 text-sm">Have them scan this QR code</p>
       {#if qrCodes.length > 0}
-        <div class="flex flex-wrap gap-4 justify-center w-full max-w-4xl">
+        <div class="flex flex-col gap-4 items-center w-full">
           {#each qrCodes as code}
-            <div class="bg-white p-3 rounded-xl flex flex-col items-center">
-              <img src={code.url} alt="QR Code" class="w-48 h-48" />
-              <p class="text-sm font-bold font-mono text-black mt-2">
-                {code.ip}:8080
-              </p>
+            <div class="bg-white p-4 rounded-2xl shadow-xl">
+              <img src={code.url} alt="QR Code" class="w-52 h-52" />
+              <p class="text-xs font-mono text-black text-center mt-2 font-bold">{code.ip}</p>
             </div>
           {/each}
         </div>
       {/if}
       <button
-        class="mt-4 px-6 py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"
+        class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-2"
         onclick={() => (screen = "menu")}
-      >
-        Cancel
-      </button>
+      >Cancel</button>
     </div>
   {:else if screen === "join"}
-    <div class="flex flex-col gap-6 items-center w-full h-full p-4">
-      <h2 class="text-2xl font-bold text-emerald-400 mt-8 mb-4">
-        Scan Host QR
-      </h2>
-      <div
-        class="w-full max-w-md aspect-square rounded-3xl overflow-hidden shadow-2xl bg-black border-4 border-neutral-700 relative"
-      >
+    <div class="flex flex-col gap-4 items-center w-full h-full p-6 pt-10">
+      <h2 class="text-2xl font-black text-emerald-400">Scan Host QR Code</h2>
+      <div class="w-full max-w-sm aspect-square rounded-3xl overflow-hidden shadow-2xl bg-black border-2 border-emerald-600/50 relative">
         <QRScanner onScan={onQrScanned} />
-        <div
-          class="absolute inset-0 border-2 border-emerald-500 block m-12 opacity-50 rounded-xl pointer-events-none"
-        ></div>
+        <div class="absolute inset-10 border-2 border-emerald-400 rounded-xl pointer-events-none opacity-60"></div>
+      </div>
+      <p class="text-neutral-500 text-xs">— or enter IP manually —</p>
+      <div class="flex gap-2 w-full max-w-sm">
+        <input
+          type="text"
+          placeholder="192.168.x.x"
+          bind:value={remoteServerIp}
+          class="flex-1 px-4 py-3 bg-neutral-800 text-white rounded-xl border border-neutral-600 focus:border-emerald-500 outline-none font-mono text-sm"
+          onkeydown={(e) => e.key === 'Enter' && onQrScanned(remoteServerIp)}
+        />
+        <button
+          class="px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 active:scale-95"
+          onclick={() => onQrScanned(remoteServerIp)}
+        >Connect</button>
       </div>
       <button
-        class="mt-8 px-6 py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"
+        class="w-full max-w-sm py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"
         onclick={() => (screen = "menu")}
-      >
-        Cancel
-      </button>
+      >Cancel</button>
     </div>
   {:else if screen === "game"}
     <div class="absolute inset-0 w-full h-full">
-      <Game {isHost} {isSinglePlayer} wsConnection={null as any} />
+      <Game {isHost} {isSinglePlayer} onBack={() => { screen = 'menu'; isSinglePlayer = false; }} />
     </div>
   {/if}
 </main>

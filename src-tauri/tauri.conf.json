@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AirHockey",
+  "productName": "PuckDuel",
   "version": "0.1.0",
-  "identifier": "com.skpawar1305.airhockey",
+  "identifier": "com.dano.puckduel",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

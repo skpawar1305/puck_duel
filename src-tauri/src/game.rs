@@ -10,7 +10,7 @@ use crate::udp_server::UdpState;
 const TW: f32 = 360.0;
 const TH: f32 = 640.0;
 const PR: f32 = 20.0;
-const PAR: f32 = 36.0;
+const PAR: f32 = 27.0;
 const GOAL_W: f32 = 110.0;
 const GX: f32 = (TW - GOAL_W) / 2.0;
 const CR: f32 = 42.0;
@@ -22,12 +22,14 @@ const FRICTION: f32 = 0.22;
 // ── Public state managed by Tauri ─────────────────────────────────────────────
 pub struct GameEngine {
     pub running: Arc<AtomicBool>,
+    pub paused:  Arc<AtomicBool>,
     pub pointer: Arc<Mutex<[f32; 2]>>,
 }
 impl GameEngine {
     pub fn new() -> Self {
         Self {
             running: Arc::new(AtomicBool::new(false)),
+            paused:  Arc::new(AtomicBool::new(false)),
             pointer: Arc::new(Mutex::new([TW / 2.0, TH - 120.0])),
         }
     }
@@ -47,6 +49,7 @@ pub struct RenderState {
     pub hit:           u8,   // 1 = paddle hit this frame
     pub wall_hit:      u8,   // 1 = wall hit this frame
     pub goal_scored:   u8,   // 1 = goal this frame
+    pub countdown:     f32,  // >0 = pre-game countdown
 }
 
 // ── Internal physics structs ──────────────────────────────────────────────────
@@ -115,8 +118,9 @@ struct GameState {
     hit:        u8,
     wall_hit:   u8,
     goal_scored:u8,
+    countdown:  f32,
 
-    // authority tracking — needed for snap-on-handoff
+    // authority tracking — snap on handoff
     prev_auth:   bool,
     is_host:     bool,
     is_single:   bool,
@@ -133,14 +137,17 @@ impl GameState {
             target_puck:     Puck  { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 },
             target_opponent: if is_host { [TW/2.0, yc] } else { [TW/2.0, yh] },
             wall_flash:0.0, goal_flash:0.0, score_flash:[0.0,0.0],
-            hit:0, wall_hit:0, goal_scored:0,
+            hit:0, wall_hit:0, goal_scored:0, countdown: 3.0,
             prev_auth: is_single || is_host,
             is_host, is_single,
         }
     }
 
     fn auth(&self) -> bool {
-        self.is_single || (self.is_host == (self.puck.y >= TH / 2.0))
+        if self.is_single { return true; }
+        // Use peer's last reported puck y — both players flip auth at the same moment
+        if self.is_host { self.target_puck.y >= TH / 2.0 }
+        else            { self.target_puck.y <  TH / 2.0 }
     }
 
     fn reset_puck(&mut self) {
@@ -150,19 +157,20 @@ impl GameState {
     fn update(&mut self, dt: f32, ptr: [f32; 2]) {
         self.hit = 0; self.wall_hit = 0; self.goal_scored = 0;
 
+        // Countdown — paddles move but puck stays frozen
+        if self.countdown > 0.0 {
+            self.countdown = (self.countdown - dt).max(0.0);
+        }
+
         // ── My paddle ────────────────────────────────────────────────────────
         {
             let p = if self.is_host { &mut self.host_paddle } else { &mut self.client_paddle };
             let (px, py) = (p.x, p.y);
-            let (dx, dy) = (ptr[0] - p.x, ptr[1] - p.y);
-            let pd = (dx*dx + dy*dy).sqrt();
-            if pd > 0.0 {
-                let s = pd.min(1400.0 * dt);
-                p.x += dx/pd * s; p.y += dy/pd * s;
-            }
-            p.x = p.x.max(PAR).min(TW - PAR);
-            if self.is_host { p.y = p.y.max(TH/2.0 + PAR/2.0).min(TH - PAR); }
-            else             { p.y = p.y.max(PAR).min(TH/2.0 - PAR/2.0); }
+
+            p.x = ptr[0].max(PAR).min(TW - PAR);
+            if self.is_host { p.y = ptr[1].max(TH / 2.0 + PAR / 2.0).min(TH - PAR); }
+            else             { p.y = ptr[1].max(PAR).min(TH / 2.0 - PAR / 2.0); }
+
             p.pvx = (p.x - px) / dt;
             p.pvy = (p.y - py) / dt;
         }
@@ -194,7 +202,12 @@ impl GameState {
         // ── Puck ──────────────────────────────────────────────────────────────
         let auth_now = self.auth();
 
-        if auth_now {
+        if auth_now && self.countdown == 0.0 {
+            // Just gained authority — start from peer's last ground-truth state
+            if !self.prev_auth {
+                self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
+                self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
+            }
             self.puck.x += self.puck.vx * dt;
             self.puck.y += self.puck.vy * dt;
 
@@ -217,6 +230,7 @@ impl GameState {
             // Side walls
             if      self.puck.x < PR    { self.puck.x = PR;    self.puck.vx =  self.puck.vx.abs()*WALL_REST; wh=true; }
             else if self.puck.x > TW-PR { self.puck.x = TW-PR; self.puck.vx = -self.puck.vx.abs()*WALL_REST; wh=true; }
+            self.puck.x = self.puck.x.clamp(PR, TW - PR); // hard safety clamp
 
             // End walls
             let in_gap = (self.puck.x - TW/2.0).abs() < GOAL_W/2.0 + PR*0.6;
@@ -235,10 +249,12 @@ impl GameState {
             // Goals
             if self.puck.y < -20.0 {
                 self.score[0] += 1; self.goal_scored = 1;
-                self.goal_flash = 1.0; self.score_flash[0] = 1.0; self.reset_puck();
+                self.goal_flash = 1.0; self.score_flash[0] = 1.0;
+                self.reset_puck(); self.countdown = 2.5;
             } else if self.puck.y > TH + 20.0 {
                 self.score[1] += 1; self.goal_scored = 1;
-                self.goal_flash = 1.0; self.score_flash[1] = 1.0; self.reset_puck();
+                self.goal_flash = 1.0; self.score_flash[1] = 1.0;
+                self.reset_puck(); self.countdown = 2.5;
             }
 
             // Paddle collisions
@@ -252,13 +268,7 @@ impl GameState {
             if cs > 0.1 && cs < MIN_SPEED { self.puck.vx=self.puck.vx/cs*MIN_SPEED; self.puck.vy=self.puck.vy/cs*MIN_SPEED; }
             else if cs > MAX_SPEED        { self.puck.vx=self.puck.vx/cs*MAX_SPEED;  self.puck.vy=self.puck.vy/cs*MAX_SPEED;  }
         } else {
-            // Snap on handoff: just lost authority this frame
-            if self.prev_auth {
-                self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
-                self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
-            }
-
-            // Dead reckoning
+            // Dead reckoning — blend toward peer's authoritative state
             self.puck.x += self.puck.vx * dt;
             self.puck.y += self.puck.vy * dt;
             let sp2 = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
@@ -278,13 +288,13 @@ impl GameState {
             let ex = self.target_puck.x - self.puck.x;
             let ey = self.target_puck.y - self.puck.y;
             let err = (ex*ex + ey*ey).sqrt();
-            if err > 80.0 {
+            if err > 120.0 {
                 self.puck.x=self.target_puck.x; self.puck.y=self.target_puck.y;
                 self.puck.vx=self.target_puck.vx; self.puck.vy=self.target_puck.vy;
             } else if err > 1.0 {
-                self.puck.x += ex*0.18; self.puck.y += ey*0.18;
-                self.puck.vx += (self.target_puck.vx - self.puck.vx)*0.25;
-                self.puck.vy += (self.target_puck.vy - self.puck.vy)*0.25;
+                self.puck.x += ex*0.12; self.puck.y += ey*0.12;
+                self.puck.vx += (self.target_puck.vx - self.puck.vx)*0.18;
+                self.puck.vy += (self.target_puck.vy - self.puck.vy)*0.18;
             }
         }
 
@@ -311,6 +321,7 @@ impl GameState {
             hit:           self.hit,
             wall_hit:      self.wall_hit,
             goal_scored:   self.goal_scored,
+            countdown:     self.countdown,
         }
     }
 
@@ -399,6 +410,7 @@ pub async fn start_game(
 
     // Cloneable handles passed into the async task
     let running  = engine.running.clone();
+    let paused   = engine.paused.clone();
     let pointer  = engine.pointer.clone();
 
     // UDP sockets (Arcs, cheap to clone)
@@ -415,10 +427,10 @@ pub async fn start_game(
         let mut interval = tokio::time::interval(Duration::from_nanos(16_666_667));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut last     = Instant::now();
-        let mut net_tick = 0u8;
 
         while running.load(Ordering::Relaxed) {
             interval.tick().await;
+            if paused.load(Ordering::Relaxed) { continue; }
             let now = Instant::now();
             let dt  = now.duration_since(last).as_secs_f32().min(0.05);
             last = now;
@@ -437,21 +449,18 @@ pub async fn start_game(
             let ptr = *pointer.lock().unwrap();
             gs.update(dt, ptr);
 
-            // Send UDP every 3rd frame (~20 Hz) — physics still at 60 Hz
-            net_tick = net_tick.wrapping_add(1);
-            if net_tick % 3 == 0 {
-                if let Some(msg) = gs.net_msg() {
-                    let bytes = msg.as_bytes();
-                    if is_host {
-                        let addrs: Vec<_> = clients_arc.lock().unwrap().keys().cloned().collect();
-                        if let Some(sock) = &host_sock {
-                            for addr in addrs {
-                                let _ = sock.send_to(bytes, addr).await;
-                            }
+            // Send UDP every frame (60 Hz) — local WiFi handles this trivially
+            if let Some(msg) = gs.net_msg() {
+                let bytes = msg.as_bytes();
+                if is_host {
+                    let addrs: Vec<_> = clients_arc.lock().unwrap().keys().cloned().collect();
+                    if let Some(sock) = &host_sock {
+                        for addr in addrs {
+                            let _ = sock.send_to(bytes, addr).await;
                         }
-                    } else if let (Some(sock), Some(addr)) = (&client_sock, client_addr) {
-                        let _ = sock.send_to(bytes, addr).await;
                     }
+                } else if let (Some(sock), Some(addr)) = (&client_sock, client_addr) {
+                    let _ = sock.send_to(bytes, addr).await;
                 }
             }
 
@@ -469,7 +478,18 @@ pub async fn start_game(
 
 #[tauri::command]
 pub fn stop_game(engine: State<'_, GameEngine>) {
+    engine.paused.store(false, Ordering::Relaxed);
     engine.running.store(false, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn pause_game(engine: State<'_, GameEngine>) {
+    engine.paused.store(true, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn resume_game(engine: State<'_, GameEngine>) {
+    engine.paused.store(false, Ordering::Relaxed);
 }
 
 #[tauri::command]
