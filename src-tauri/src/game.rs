@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -8,9 +9,9 @@ use crate::relay::RelayState;
 
 // ── Simulated network conditions (LAN testing) ───────────────────────────────
 const SIM_LAG_MS: u64  = 100;
-const SIM_LOSS_PCT: u64 = 3; // out of 100
+const SIM_LOSS_PCT: u64 = 3;
 
-
+// ── Constants ────────────────────────────────────────────────────────────────
 const TW: f32 = 360.0;
 const TH: f32 = 640.0;
 const PR: f32 = 20.0;
@@ -22,8 +23,9 @@ const MAX_SPEED: f32 = 900.0;
 const MIN_SPEED: f32 = 160.0;
 const WALL_REST: f32 = 0.88;
 const FRICTION: f32 = 0.22;
+const HISTORY_MS: u64 = 350; // puck history depth for rewind
 
-// ── Public state managed by Tauri ─────────────────────────────────────────────
+// ── Public state managed by Tauri ────────────────────────────────────────────
 pub struct GameEngine {
     pub running: Arc<AtomicBool>,
     pub paused:  Arc<AtomicBool>,
@@ -39,7 +41,7 @@ impl GameEngine {
     }
 }
 
-// ── Render state sent to JS via Channel every frame ───────────────────────────
+// ── Render state sent to JS via Channel every frame ──────────────────────────
 #[derive(serde::Serialize, Clone)]
 pub struct RenderState {
     pub puck:          [f32; 2],
@@ -50,10 +52,10 @@ pub struct RenderState {
     pub wall_flash:    f32,
     pub goal_flash:    f32,
     pub score_flash:   [f32; 2],
-    pub hit:           u8,   // 1 = paddle hit this frame
-    pub wall_hit:      u8,   // 1 = wall hit this frame
-    pub goal_scored:   u8,   // 1 = goal this frame
-    pub countdown:     f32,  // >0 = pre-game countdown
+    pub hit:           u8,
+    pub wall_hit:      u8,
+    pub goal_scored:   u8,
+    pub countdown:     f32,
 }
 
 // ── Internal physics structs ──────────────────────────────────────────────────
@@ -102,6 +104,60 @@ fn collide_goal_post(puck: &mut Puck, px: f32, py: f32) -> bool {
     if dot < 0.0 { puck.vx -= (1.0+WALL_REST)*dot*nx; puck.vy -= (1.0+WALL_REST)*dot*ny; true } else { false }
 }
 
+fn run_puck_physics(puck: &mut Puck, dt: f32, host_paddle: &Paddle, client_paddle: &Paddle)
+    -> (bool /* wall_hit */, bool /* paddle_hit */, bool /* goal */)
+{
+    puck.x += puck.vx * dt;
+    puck.y += puck.vy * dt;
+
+    // Friction
+    let sp = (puck.vx*puck.vx + puck.vy*puck.vy).sqrt();
+    if sp > 0.0 {
+        let loss = (FRICTION * sp * dt).min(sp);
+        puck.vx -= puck.vx/sp * loss;
+        puck.vy -= puck.vy/sp * loss;
+    }
+
+    // Corner fillets
+    let mut wh = false;
+    let (px, py) = (puck.x, puck.y);
+    wh |= collide_corner_puck(puck, CR,    CR,    px<CR    && py<CR);
+    wh |= collide_corner_puck(puck, TW-CR, CR,    px>TW-CR && py<CR);
+    wh |= collide_corner_puck(puck, CR,    TH-CR, px<CR    && py>TH-CR);
+    wh |= collide_corner_puck(puck, TW-CR, TH-CR, px>TW-CR && py>TH-CR);
+
+    // Side walls
+    if      puck.x < PR    { puck.x = PR;    puck.vx =  puck.vx.abs()*WALL_REST; wh=true; }
+    else if puck.x > TW-PR { puck.x = TW-PR; puck.vx = -puck.vx.abs()*WALL_REST; wh=true; }
+    puck.x = puck.x.clamp(PR, TW - PR);
+
+    // End walls (only outside goal gap)
+    let in_gap = (puck.x - TW/2.0).abs() < GOAL_W/2.0 + PR*0.6;
+    if !in_gap {
+        if      puck.y < PR    { puck.y = PR;    puck.vy =  puck.vy.abs()*WALL_REST; wh=true; }
+        else if puck.y > TH-PR { puck.y = TH-PR; puck.vy = -puck.vy.abs()*WALL_REST; wh=true; }
+    }
+
+    // Goal posts
+    wh |= collide_goal_post(puck, GX,        0.0);
+    wh |= collide_goal_post(puck, GX+GOAL_W, 0.0);
+    wh |= collide_goal_post(puck, GX,        TH);
+    wh |= collide_goal_post(puck, GX+GOAL_W, TH);
+
+    // Paddle collisions
+    let mut ph = false;
+    if collide_paddle_puck(puck, host_paddle)   { ph = true; }
+    if collide_paddle_puck(puck, client_paddle) { ph = true; }
+
+    // Speed clamp
+    let cs = (puck.vx*puck.vx + puck.vy*puck.vy).sqrt();
+    if cs > 0.1 && cs < MIN_SPEED { puck.vx=puck.vx/cs*MIN_SPEED; puck.vy=puck.vy/cs*MIN_SPEED; }
+    else if cs > MAX_SPEED        { puck.vx=puck.vx/cs*MAX_SPEED;  puck.vy=puck.vy/cs*MAX_SPEED; }
+
+    let goal = puck.y < -20.0 || puck.y > TH + 20.0;
+    (wh, ph, goal)
+}
+
 // ── Game state ────────────────────────────────────────────────────────────────
 struct GameState {
     puck:            Puck,
@@ -109,25 +165,28 @@ struct GameState {
     client_paddle:   Paddle,
     score:           [u32; 2],
 
-    // dead-reckoning targets (non-auth side)
-    target_puck:     Puck,
-    target_opponent: [f32; 2],
+    target_puck:     Puck,       // client: last authoritative puck from host
+    target_opponent: [f32; 2],   // both: last received opponent paddle pos
 
-    // visual FX
     wall_flash:      f32,
     goal_flash:      f32,
     score_flash:     [f32; 2],
+    hit:             u8,
+    wall_hit:        u8,
+    goal_scored:     u8,
+    countdown:       f32,
 
-    // audio cues consumed by renderer
-    hit:        u8,
-    wall_hit:   u8,
-    goal_scored:u8,
-    countdown:  f32,
+    is_host:         bool,
+    is_single:       bool,
 
-    // authority tracking — snap on handoff
-    prev_auth:   bool,
-    is_host:     bool,
-    is_single:   bool,
+    // RTT / host-authoritative networking
+    start_instant:   Instant,
+    puck_history:    VecDeque<(u64, Puck)>, // host: ring buffer for rewind
+    rtt_ms:          f32,                   // client: smoothed round-trip time
+    lag_ms:          u32,                   // client: one-way lag estimate (rtt/2)
+    hit_frames:      u8,                    // client: frames left to broadcast a hit
+    last_client_ts:  u64,                   // host: last ts received from client (for echo)
+    last_hit_ms:     u64,                   // host: time of last rewind hit (dedup)
 }
 
 impl GameState {
@@ -142,35 +201,63 @@ impl GameState {
             target_opponent: if is_host { [TW/2.0, yc] } else { [TW/2.0, yh] },
             wall_flash:0.0, goal_flash:0.0, score_flash:[0.0,0.0],
             hit:0, wall_hit:0, goal_scored:0, countdown: 3.0,
-            prev_auth: is_single || is_host,
             is_host, is_single,
+            start_instant:  Instant::now(),
+            puck_history:   VecDeque::new(),
+            rtt_ms:         0.0,
+            lag_ms:         0,
+            hit_frames:     0,
+            last_client_ts: 0,
+            last_hit_ms:    0,
         }
     }
 
-    fn auth(&self) -> bool {
-        if self.is_single { return true; }
-        // Hysteresis: once you have authority, keep it 80px past midline into
-        // opponent's half before releasing. Gain it only 80px into your own half.
-        // This reduces handoff frequency and gives the new owner a clean momentum snapshot.
-        const HYST: f32 = 80.0;
-        let y = self.target_puck.y;
-        if self.is_host {
-            if self.prev_auth { y >= TH / 2.0 - HYST } // hold until well into client half
-            else              { y >= TH / 2.0 + HYST } // gain only when clearly in host half
-        } else {
-            if self.prev_auth { y <  TH / 2.0 + HYST } // hold until well into host half
-            else              { y <  TH / 2.0 - HYST } // gain only when clearly in client half
-        }
+    fn now_ms(&self) -> u64 {
+        self.start_instant.elapsed().as_millis() as u64
     }
 
     fn reset_puck(&mut self) {
         self.puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
     }
 
+    /// Host: check if client paddle would have hit the puck `lag_ms` ago;
+    /// if so, apply the velocity impulse to the current puck.
+    fn apply_rewind_hit(&mut self, lag_ms: u32) {
+        if self.puck_history.is_empty() { return; }
+        let now = self.now_ms();
+        let target_t = now.saturating_sub(lag_ms as u64);
+
+        // Find closest snapshot
+        let hist = self.puck_history.iter()
+            .min_by_key(|(t, _)| ((*t as i64) - target_t as i64).abs())
+            .map(|(_, p)| p.clone())
+            .unwrap_or_else(|| self.puck.clone());
+
+        let orig_vx = hist.vx;
+        let orig_vy = hist.vy;
+        let mut test = hist;
+        let cp = self.client_paddle.clone();
+
+        if collide_paddle_puck(&mut test, &cp) {
+            // Apply the velocity impulse to the current live puck
+            self.puck.vx += test.vx - orig_vx;
+            self.puck.vy += test.vy - orig_vy;
+            let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
+            if cs > 0.1 && cs < MIN_SPEED {
+                self.puck.vx = self.puck.vx/cs*MIN_SPEED;
+                self.puck.vy = self.puck.vy/cs*MIN_SPEED;
+            } else if cs > MAX_SPEED {
+                self.puck.vx = self.puck.vx/cs*MAX_SPEED;
+                self.puck.vy = self.puck.vy/cs*MAX_SPEED;
+            }
+            self.hit = 1;
+        }
+    }
+
     fn update(&mut self, dt: f32, ptr: [f32; 2]) {
         self.hit = 0; self.wall_hit = 0; self.goal_scored = 0;
 
-        // Countdown — paddles move but puck stays frozen
+        // Countdown
         if self.countdown > 0.0 {
             self.countdown = (self.countdown - dt).max(0.0);
         }
@@ -179,11 +266,9 @@ impl GameState {
         {
             let p = if self.is_host { &mut self.host_paddle } else { &mut self.client_paddle };
             let (px, py) = (p.x, p.y);
-
             p.x = ptr[0].max(PAR).min(TW - PAR);
             if self.is_host { p.y = ptr[1].max(TH / 2.0 + PAR / 2.0).min(TH - PAR); }
             else             { p.y = ptr[1].max(PAR).min(TH / 2.0 - PAR / 2.0); }
-
             p.pvx = (p.x - px) / dt;
             p.pvy = (p.y - py) / dt;
         }
@@ -213,117 +298,84 @@ impl GameState {
         }
 
         // ── Puck ──────────────────────────────────────────────────────────────
-        let auth_now = self.auth();
+        if self.countdown > 0.0 && !self.is_host && !self.is_single {
+            // Client during countdown: freeze puck, blend toward host center
+            self.puck.vx = 0.0; self.puck.vy = 0.0;
+            self.puck.x += (self.target_puck.x - self.puck.x) * 0.3;
+            self.puck.y += (self.target_puck.y - self.puck.y) * 0.3;
+        } else if self.is_host || self.is_single {
+            // ── HOST: authoritative physics ───────────────────────────────────
+            if self.countdown == 0.0 {
+                let hp = self.host_paddle.clone();
+                let cp = self.client_paddle.clone();
+                let (wh, ph, goal) = run_puck_physics(&mut self.puck, dt, &hp, &cp);
+                if wh { self.wall_hit = 1; self.wall_flash = 1.0; }
+                if ph { self.hit = 1; }
 
-        if auth_now && self.countdown == 0.0 {
-            // Just gained authority — start from peer's last ground-truth state
-            if !self.prev_auth {
-                self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
-                self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
+                if goal {
+                    if self.puck.y < -20.0 {
+                        self.score[0] += 1;
+                    } else {
+                        self.score[1] += 1;
+                    }
+                    self.goal_scored = 1;
+                    self.goal_flash = 1.0;
+                    let idx = if self.puck.y < -20.0 { 0 } else { 1 };
+                    self.score_flash[idx] = 1.0;
+                    self.reset_puck();
+                    self.countdown = 2.5;
+                }
+
+                // Save to history for rewind (only when playing)
+                let now = self.now_ms();
+                self.puck_history.push_back((now, self.puck.clone()));
+                while self.puck_history.front()
+                    .map_or(false, |(t,_)| now.saturating_sub(*t) > HISTORY_MS)
+                {
+                    self.puck_history.pop_front();
+                }
             }
-            self.puck.x += self.puck.vx * dt;
-            self.puck.y += self.puck.vy * dt;
+        } else {
+            // ── CLIENT: local prediction + correction ─────────────────────────
+            if self.hit_frames > 0 { self.hit_frames -= 1; }
 
-            // Friction
-            let sp = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if sp > 0.0 {
-                let loss = (FRICTION * sp * dt).min(sp);
-                self.puck.vx -= self.puck.vx/sp * loss;
-                self.puck.vy -= self.puck.vy/sp * loss;
-            }
-
-            // Corner fillets
-            let mut wh = false;
-            let (px, py) = (self.puck.x, self.puck.y);
-            wh |= collide_corner_puck(&mut self.puck, CR,    CR,    px<CR    && py<CR);
-            wh |= collide_corner_puck(&mut self.puck, TW-CR, CR,    px>TW-CR && py<CR);
-            wh |= collide_corner_puck(&mut self.puck, CR,    TH-CR, px<CR    && py>TH-CR);
-            wh |= collide_corner_puck(&mut self.puck, TW-CR, TH-CR, px>TW-CR && py>TH-CR);
-
-            // Side walls
-            if      self.puck.x < PR    { self.puck.x = PR;    self.puck.vx =  self.puck.vx.abs()*WALL_REST; wh=true; }
-            else if self.puck.x > TW-PR { self.puck.x = TW-PR; self.puck.vx = -self.puck.vx.abs()*WALL_REST; wh=true; }
-            self.puck.x = self.puck.x.clamp(PR, TW - PR); // hard safety clamp
-
-            // End walls
-            let in_gap = (self.puck.x - TW/2.0).abs() < GOAL_W/2.0 + PR*0.6;
-            if !in_gap {
-                if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; wh=true; }
-                else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; wh=true; }
-            }
-
-            // Goal posts
-            wh |= collide_goal_post(&mut self.puck, GX,          0.0);
-            wh |= collide_goal_post(&mut self.puck, GX+GOAL_W,   0.0);
-            wh |= collide_goal_post(&mut self.puck, GX,           TH);
-            wh |= collide_goal_post(&mut self.puck, GX+GOAL_W,    TH);
-            if wh { self.wall_hit = 1; self.wall_flash = 1.0; }
-
-            // Goals
-            if self.puck.y < -20.0 {
-                self.score[0] += 1; self.goal_scored = 1;
-                self.goal_flash = 1.0; self.score_flash[0] = 1.0;
-                self.reset_puck(); self.countdown = 2.5;
-            } else if self.puck.y > TH + 20.0 {
-                self.score[1] += 1; self.goal_scored = 1;
-                self.goal_flash = 1.0; self.score_flash[1] = 1.0;
-                self.reset_puck(); self.countdown = 2.5;
-            }
-
-            // Paddle collisions
             let hp = self.host_paddle.clone();
             let cp = self.client_paddle.clone();
-            if collide_paddle_puck(&mut self.puck, &hp) { self.hit = 1; }
-            if collide_paddle_puck(&mut self.puck, &cp) { self.hit = 1; }
+            let (wh, ph, _goal) = run_puck_physics(&mut self.puck, dt, &hp, &cp);
+            if wh { self.wall_hit = 1; }
+            if ph {
+                self.hit = 1;
+                if self.hit_frames == 0 { self.hit_frames = 3; } // broadcast for 3 frames
+            }
 
-            // Speed clamp
-            let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if cs > 0.1 && cs < MIN_SPEED { self.puck.vx=self.puck.vx/cs*MIN_SPEED; self.puck.vy=self.puck.vy/cs*MIN_SPEED; }
-            else if cs > MAX_SPEED        { self.puck.vx=self.puck.vx/cs*MAX_SPEED;  self.puck.vy=self.puck.vy/cs*MAX_SPEED;  }
-        } else {
-            // Dead reckoning — blend toward peer's authoritative state
-            self.puck.x += self.puck.vx * dt;
-            self.puck.y += self.puck.vy * dt;
-            let sp2 = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if sp2 > 0.0 {
-                let loss = (FRICTION * sp2 * dt).min(sp2);
-                self.puck.vx -= self.puck.vx/sp2*loss; self.puck.vy -= self.puck.vy/sp2*loss;
-            }
-            if      self.puck.x < PR    { self.puck.x = PR;    self.puck.vx =  self.puck.vx.abs()*WALL_REST; }
-            else if self.puck.x > TW-PR { self.puck.x = TW-PR; self.puck.vx = -self.puck.vx.abs()*WALL_REST; }
-            let ig2 = (self.puck.x - TW/2.0).abs() < GOAL_W/2.0 + PR*0.6;
-            if !ig2 {
-                if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; }
-                else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; }
-            }
-            // Puck passed a goal — reset locally so it doesn't fly off screen
-            // while waiting for the authoritative reset message (up to 100ms away)
+            // Local goal reset — don't score (host is authoritative for score)
             if self.puck.y < -20.0 || self.puck.y > TH + 20.0 {
                 self.reset_puck();
             }
 
-            // Blend toward authoritative peer state
+            // Correct toward host's authoritative state
             let ex = self.target_puck.x - self.puck.x;
             let ey = self.target_puck.y - self.puck.y;
             let err = (ex*ex + ey*ey).sqrt();
 
-            // If peer already reset puck to center (after goal), snap immediately
-            // rather than dead-reckoning the puck flying off screen for 100ms
+            // Snap if: peer reset to center, large error, or puck just started moving
             let peer_reset = (self.target_puck.x - TW/2.0).abs() < 10.0
                 && (self.target_puck.y - TH/2.0).abs() < 10.0
                 && self.target_puck.vx.abs() < 1.0
                 && self.target_puck.vy.abs() < 1.0;
-            if peer_reset || err > 120.0 {
-                self.puck.x=self.target_puck.x; self.puck.y=self.target_puck.y;
-                self.puck.vx=self.target_puck.vx; self.puck.vy=self.target_puck.vy;
-            } else if err > 1.0 {
-                self.puck.x += ex*0.28; self.puck.y += ey*0.28;
-                self.puck.vx += (self.target_puck.vx - self.puck.vx)*0.40;
-                self.puck.vy += (self.target_puck.vy - self.puck.vy)*0.40;
+            let just_started = self.puck.vx.abs() < 1.0 && self.puck.vy.abs() < 1.0
+                && (self.target_puck.vx.abs() > 50.0 || self.target_puck.vy.abs() > 50.0);
+
+            if peer_reset || err > 150.0 || just_started {
+                self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
+                self.puck.vx = self.target_puck.vx;  self.puck.vy = self.target_puck.vy;
+            } else if err > 2.0 {
+                self.puck.x  += ex * 0.15;
+                self.puck.y  += ey * 0.15;
+                self.puck.vx += (self.target_puck.vx - self.puck.vx) * 0.20;
+                self.puck.vy += (self.target_puck.vy - self.puck.vy) * 0.20;
             }
         }
-
-        self.prev_auth = auth_now;
 
         // FX decay
         self.goal_flash     = (self.goal_flash     - dt*2.5).max(0.0);
@@ -350,55 +402,57 @@ impl GameState {
         }
     }
 
-    /// Network message to broadcast/send this frame (authoritative side only)
     fn net_msg(&self) -> Option<String> {
         if self.is_single { return None; }
+        let now = self.now_ms();
         if self.is_host {
-            let msg = serde_json::json!({
-                "type": "state",
+            Some(serde_json::json!({
+                "type":       "state",
                 "hostPaddle": [self.host_paddle.x, self.host_paddle.y],
-                "puck": [self.puck.x, self.puck.y],
-                "vel":  [self.puck.vx, self.puck.vy],
-                "score": self.score
-            });
-            Some(msg.to_string())
+                "puck":       [self.puck.x, self.puck.y],
+                "vel":        [self.puck.vx, self.puck.vy],
+                "score":      self.score,
+                "echo_ts":    self.last_client_ts,
+            }).to_string())
         } else {
-            let mut m = serde_json::json!({
+            Some(serde_json::json!({
                 "type": "input",
-                "pos": [self.client_paddle.x, self.client_paddle.y]
-            });
-            if self.auth() {
-                m["puck"]  = serde_json::json!([self.puck.x, self.puck.y]);
-                m["vel"]   = serde_json::json!([self.puck.vx, self.puck.vy]);
-                m["score"] = serde_json::json!(self.score);
-            }
-            Some(m.to_string())
+                "pos":  [self.client_paddle.x, self.client_paddle.y],
+                "ts":   now,
+                "lag":  self.lag_ms,
+                "hit":  self.hit_frames > 0,
+            }).to_string())
         }
     }
 
     fn apply_net(&mut self, msg: &str) {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else { return };
+
         if self.is_host && v["type"] == "input" {
             if let Some(pos) = v["pos"].as_array() {
-                self.target_opponent = [pos[0].as_f64().unwrap_or(0.0) as f32,
-                                        pos[1].as_f64().unwrap_or(0.0) as f32];
+                let nx = pos[0].as_f64().unwrap_or(0.0) as f32;
+                let ny = pos[1].as_f64().unwrap_or(0.0) as f32;
+                self.target_opponent = [nx, ny];
             }
-            if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                self.target_puck = Puck {
-                    x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                    y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                    vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                    vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                };
+            // Echo timestamp back to client
+            if let Some(ts) = v["ts"].as_u64() {
+                self.last_client_ts = ts;
             }
-            if let Some(s) = v["score"].as_array() {
-                self.score = [s[0].as_u64().unwrap_or(0) as u32,
-                              s[1].as_u64().unwrap_or(0) as u32];
+            // Rewind hit — deduplicated with 150ms cooldown
+            if v["hit"].as_bool().unwrap_or(false) {
+                let now = self.now_ms();
+                if now.saturating_sub(self.last_hit_ms) > 150 {
+                    let lag = v["lag"].as_u64().unwrap_or(50) as u32;
+                    self.apply_rewind_hit(lag);
+                    self.last_hit_ms = now;
+                }
             }
         } else if !self.is_host && v["type"] == "state" {
             if let Some(hp) = v["hostPaddle"].as_array() {
-                self.target_opponent = [hp[0].as_f64().unwrap_or(0.0) as f32,
-                                        hp[1].as_f64().unwrap_or(0.0) as f32];
+                self.target_opponent = [
+                    hp[0].as_f64().unwrap_or(0.0) as f32,
+                    hp[1].as_f64().unwrap_or(0.0) as f32,
+                ];
             }
             if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
                 self.target_puck = Puck {
@@ -409,8 +463,22 @@ impl GameState {
                 };
             }
             if let Some(s) = v["score"].as_array() {
-                self.score = [s[0].as_u64().unwrap_or(0) as u32,
-                              s[1].as_u64().unwrap_or(0) as u32];
+                self.score = [
+                    s[0].as_u64().unwrap_or(0) as u32,
+                    s[1].as_u64().unwrap_or(0) as u32,
+                ];
+            }
+            // RTT measurement: echo_ts is the ts we sent, now echoed back
+            if let Some(echo_ts) = v["echo_ts"].as_u64() {
+                if echo_ts > 0 {
+                    let now = self.now_ms();
+                    if now > echo_ts {
+                        let rtt = (now - echo_ts) as f32;
+                        self.rtt_ms = if self.rtt_ms == 0.0 { rtt }
+                                      else { self.rtt_ms * 0.9 + rtt * 0.1 };
+                        self.lag_ms = (self.rtt_ms / 2.0) as u32;
+                    }
+                }
             }
         }
     }
@@ -429,32 +497,22 @@ pub async fn start_game(
     channel:          Channel<RenderState>,
 ) -> Result<(), String> {
     if engine.running.swap(true, Ordering::SeqCst) {
-        return Ok(()); // already running
+        return Ok(());
     }
 
-    // Reset pointer to starting position
     *engine.pointer.lock().unwrap() = if is_host { [TW/2.0, TH-120.0] } else { [TW/2.0, 120.0] };
 
-    // Cloneable handles passed into the async task
     let running  = engine.running.clone();
     let paused   = engine.paused.clone();
     let pointer  = engine.pointer.clone();
 
-    // UDP sockets (Arcs, cheap to clone)
     let host_sock    = udp.host_socket.lock().unwrap().clone();
     let client_sock  = udp.client_socket.lock().unwrap().clone();
     let client_addr  = udp.client_remote_addr.lock().unwrap().clone();
     let clients_arc  = udp.connected_clients.clone();
 
-    // Relay write channel (clone sender if relay mode)
     let relay_write_tx = if use_relay { relay.write_tx.lock().unwrap().clone() } else { None };
-
-    // Subscribe to the appropriate broadcast channel
-    let mut net_rx = if use_relay {
-        relay.msg_tx.subscribe()
-    } else {
-        udp.msg_tx.subscribe()
-    };
+    let mut net_rx = if use_relay { relay.msg_tx.subscribe() } else { udp.msg_tx.subscribe() };
 
     tokio::spawn(async move {
         let mut gs       = GameState::new(is_host, is_single_player);
@@ -469,26 +527,23 @@ pub async fn start_game(
             let dt  = now.duration_since(last).as_secs_f32().min(0.05);
             last = now;
 
-            // Drain ALL pending network messages (take only the latest if multiple arrived)
             loop {
                 match net_rx.try_recv() {
-                    Ok(msg)                                => { gs.apply_net(&msg); }
-                    Err(tokio::sync::broadcast::error::TryRecvError::Empty)   => break,
-                    Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => break, // stale, skip
+                    Ok(msg) => { gs.apply_net(&msg); }
+                    Err(tokio::sync::broadcast::error::TryRecvError::Empty)    => break,
+                    Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => break,
                     Err(_) => break,
                 }
             }
 
-            // Physics tick
             let ptr = *pointer.lock().unwrap();
             gs.update(dt, ptr);
 
-            // Send every frame (60 Hz)
+            // Send every frame with simulated lag/loss
             if let Some(msg) = gs.net_msg() {
                 if let Some(ref rtx) = relay_write_tx {
                     let _ = rtx.send(msg);
                 } else {
-                    // Simulate packet loss
                     let ns = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
@@ -515,10 +570,7 @@ pub async fn start_game(
                 }
             }
 
-            // Push render state to JS — this is the only remaining IPC
-            if channel.send(gs.to_render()).is_err() {
-                break; // JS closed the channel (navigated away)
-            }
+            if channel.send(gs.to_render()).is_err() { break; }
         }
 
         running.store(false, Ordering::Relaxed);
