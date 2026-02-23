@@ -7,8 +7,8 @@ use crate::udp_server::UdpState;
 use crate::relay::RelayState;
 
 // ── Simulated network conditions (LAN testing) ───────────────────────────────
-const SIM_LAG_MS: u64  = 100;
-const SIM_LOSS_PCT: u64 = 3; // out of 100
+const SIM_LAG_MS: u64  = 0;
+const SIM_LOSS_PCT: u64 = 0; // out of 100
 
 
 const TW: f32 = 360.0;
@@ -19,7 +19,6 @@ const GOAL_W: f32 = 110.0;
 const GX: f32 = (TW - GOAL_W) / 2.0;
 const CR: f32 = 42.0;
 const MAX_SPEED: f32 = 900.0;
-const MIN_SPEED: f32 = 160.0;
 const WALL_REST: f32 = 0.88;
 const FRICTION: f32 = 0.22;
 
@@ -276,10 +275,9 @@ impl GameState {
             if collide_paddle_puck(&mut self.puck, &hp) { self.hit = 1; }
             if collide_paddle_puck(&mut self.puck, &cp) { self.hit = 1; }
 
-            // Speed clamp
+            // Speed clamp (max only)
             let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if cs > 0.1 && cs < MIN_SPEED { self.puck.vx=self.puck.vx/cs*MIN_SPEED; self.puck.vy=self.puck.vy/cs*MIN_SPEED; }
-            else if cs > MAX_SPEED        { self.puck.vx=self.puck.vx/cs*MAX_SPEED;  self.puck.vy=self.puck.vy/cs*MAX_SPEED;  }
+            if cs > MAX_SPEED { self.puck.vx=self.puck.vx/cs*MAX_SPEED; self.puck.vy=self.puck.vy/cs*MAX_SPEED; }
         } else {
             // Dead reckoning — blend toward peer's authoritative state
             self.puck.x += self.puck.vx * dt;
