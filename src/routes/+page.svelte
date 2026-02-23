@@ -123,6 +123,8 @@
       // If we are Host waiting on QR Code screen, any payload means client joined
       if (isHost && screen === "host") {
         clientConnected = true;
+        initAudio();
+        flushSync(() => { screen = "game"; });
       }
     });
     unlistenRelay = await listen("relay-peer-connected", () => {
