@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
 use tokio::sync::broadcast;
-use tauri::{State, Emitter, Manager};
+use tauri::{State, Emitter};
 use local_ip_address::local_ip;
 
 pub struct UdpState {
