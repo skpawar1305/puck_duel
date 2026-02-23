@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::State;
 use crate::udp_server::UdpState;
+use crate::relay::RelayState;
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TW: f32 = 360.0;
@@ -394,11 +395,13 @@ impl GameState {
 
 #[tauri::command]
 pub async fn start_game(
-    engine:          State<'_, GameEngine>,
-    udp:             State<'_, UdpState>,
-    is_host:         bool,
-    is_single_player:bool,
-    channel:         Channel<RenderState>,
+    engine:           State<'_, GameEngine>,
+    udp:              State<'_, UdpState>,
+    relay:            State<'_, RelayState>,
+    is_host:          bool,
+    is_single_player: bool,
+    use_relay:        bool,
+    channel:          Channel<RenderState>,
 ) -> Result<(), String> {
     if engine.running.swap(true, Ordering::SeqCst) {
         return Ok(()); // already running
@@ -418,8 +421,15 @@ pub async fn start_game(
     let client_addr  = udp.client_remote_addr.lock().unwrap().clone();
     let clients_arc  = udp.connected_clients.clone();
 
-    // Subscribe to the broadcast channel (receive task → game loop, zero socket contention)
-    let mut net_rx = udp.msg_tx.subscribe();
+    // Relay write channel (clone sender if relay mode)
+    let relay_write_tx = if use_relay { relay.write_tx.lock().unwrap().clone() } else { None };
+
+    // Subscribe to the appropriate broadcast channel
+    let mut net_rx = if use_relay {
+        relay.msg_tx.subscribe()
+    } else {
+        udp.msg_tx.subscribe()
+    };
 
     tokio::spawn(async move {
         let mut gs       = GameState::new(is_host, is_single_player);
@@ -448,18 +458,22 @@ pub async fn start_game(
             let ptr = *pointer.lock().unwrap();
             gs.update(dt, ptr);
 
-            // Send UDP every frame (60 Hz) — local WiFi handles this trivially
+            // Send every frame (60 Hz)
             if let Some(msg) = gs.net_msg() {
-                let bytes = msg.as_bytes();
-                if is_host {
-                    let addrs: Vec<_> = clients_arc.lock().unwrap().keys().cloned().collect();
-                    if let Some(sock) = &host_sock {
-                        for addr in addrs {
-                            let _ = sock.send_to(bytes, addr).await;
+                if let Some(ref rtx) = relay_write_tx {
+                    let _ = rtx.send(msg);
+                } else {
+                    let bytes = msg.as_bytes();
+                    if is_host {
+                        let addrs: Vec<_> = clients_arc.lock().unwrap().keys().cloned().collect();
+                        if let Some(sock) = &host_sock {
+                            for addr in addrs {
+                                let _ = sock.send_to(bytes, addr).await;
+                            }
                         }
+                    } else if let (Some(sock), Some(addr)) = (&client_sock, client_addr) {
+                        let _ = sock.send_to(bytes, addr).await;
                     }
-                } else if let (Some(sock), Some(addr)) = (&client_sock, client_addr) {
-                    let _ = sock.send_to(bytes, addr).await;
                 }
             }
 

@@ -7,10 +7,12 @@
     let {
         isHost,
         isSinglePlayer = false,
+        isOnline = false,
         onBack,
     } = $props<{
         isHost: boolean;
         isSinglePlayer?: boolean;
+        isOnline?: boolean;
         onBack?: () => void;
     }>();
 
@@ -322,7 +324,7 @@
                 invoke("stop_game").catch(() => {});
             }
         };
-        await invoke("start_game", { isHost, isSinglePlayer, channel: ch });
+        await invoke("start_game", { isHost, isSinglePlayer, useRelay: isOnline, channel: ch });
     }
 
     // ── Input → Rust ──────────────────────────────────────────────────────────
@@ -388,6 +390,7 @@
         await invoke("start_game", {
             isHost,
             isSinglePlayer,
+            useRelay: isOnline,
             channel: ch,
         });
 
