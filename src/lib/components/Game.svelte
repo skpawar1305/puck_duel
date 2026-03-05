@@ -7,12 +7,10 @@
     let {
         isHost,
         isSinglePlayer = false,
-        isOnline = false,
         onBack,
     } = $props<{
         isHost: boolean;
         isSinglePlayer?: boolean;
-        isOnline?: boolean;
         onBack?: () => void;
     }>();
 
@@ -324,7 +322,7 @@
                 invoke("stop_game").catch(() => {});
             }
         };
-        await invoke("start_game", { isHost, isSinglePlayer, useRelay: isOnline, channel: ch });
+        await invoke("start_game", { isHost, isSinglePlayer, channel: ch });
     }
 
     // ── Input → Rust ──────────────────────────────────────────────────────────
@@ -387,12 +385,7 @@
         };
 
         // Start Rust game engine
-        await invoke("start_game", {
-            isHost,
-            isSinglePlayer,
-            useRelay: isOnline,
-            channel: ch,
-        });
+        await invoke("start_game", { isHost, isSinglePlayer, channel: ch });
 
         rafId = requestAnimationFrame(draw);
     });

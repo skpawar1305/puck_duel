@@ -3,12 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::State;
-use crate::udp_server::UdpState;
-use crate::relay::RelayState;
-
-// ── Simulated network conditions (LAN testing) ───────────────────────────────
-const SIM_LAG_MS: u64  = 0;
-const SIM_LOSS_PCT: u64 = 0; // out of 100
+use crate::transport::TransportState;
 
 
 const TW: f32 = 360.0;
@@ -423,11 +418,9 @@ impl GameState {
 #[tauri::command]
 pub async fn start_game(
     engine:           State<'_, GameEngine>,
-    udp:              State<'_, UdpState>,
-    relay:            State<'_, RelayState>,
+    transport:        State<'_, TransportState>,
     is_host:          bool,
     is_single_player: bool,
-    use_relay:        bool,
     channel:          Channel<RenderState>,
 ) -> Result<(), String> {
     if engine.running.swap(true, Ordering::SeqCst) {
@@ -442,21 +435,11 @@ pub async fn start_game(
     let paused   = engine.paused.clone();
     let pointer  = engine.pointer.clone();
 
-    // UDP sockets (Arcs, cheap to clone)
-    let host_sock    = udp.host_socket.lock().unwrap().clone();
-    let client_sock  = udp.client_socket.lock().unwrap().clone();
-    let client_addr  = udp.client_remote_addr.lock().unwrap().clone();
-    let clients_arc  = udp.connected_clients.clone();
+    // iroh connection handle (clone the Arc, not the option)
+    let connection = transport.connection.clone();
 
-    // Relay write channel (clone sender if relay mode)
-    let relay_write_tx = if use_relay { relay.write_tx.lock().unwrap().clone() } else { None };
-
-    // Subscribe to the appropriate broadcast channel
-    let mut net_rx = if use_relay {
-        relay.msg_tx.subscribe()
-    } else {
-        udp.msg_tx.subscribe()
-    };
+    // Subscribe to the broadcast channel fed by the recv loop in transport.rs
+    let mut net_rx = transport.msg_tx.subscribe();
 
     tokio::spawn(async move {
         let mut gs       = GameState::new(is_host, is_single_player);
@@ -485,35 +468,10 @@ pub async fn start_game(
             let ptr = *pointer.lock().unwrap();
             gs.update(dt, ptr);
 
-            // Send every frame (60 Hz)
+            // Send every frame (60 Hz) — fire-and-forget QUIC datagram
             if let Some(msg) = gs.net_msg() {
-                if let Some(ref rtx) = relay_write_tx {
-                    let _ = rtx.send(msg);
-                } else {
-                    // Simulate packet loss
-                    let ns = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .subsec_nanos() as u64;
-                    if ns % 100 >= SIM_LOSS_PCT {
-                        let bytes = msg.into_bytes();
-                        if is_host {
-                            let addrs: Vec<_> = clients_arc.lock().unwrap().keys().cloned().collect();
-                            if let Some(sock) = host_sock.clone() {
-                                tokio::spawn(async move {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(SIM_LAG_MS)).await;
-                                    for addr in addrs {
-                                        let _ = sock.send_to(&bytes, addr).await;
-                                    }
-                                });
-                            }
-                        } else if let (Some(sock), Some(addr)) = (client_sock.clone(), client_addr) {
-                            tokio::spawn(async move {
-                                tokio::time::sleep(tokio::time::Duration::from_millis(SIM_LAG_MS)).await;
-                                let _ = sock.send_to(&bytes, addr).await;
-                            });
-                        }
-                    }
+                if let Some(ref conn) = *connection.blocking_lock() {
+                    let _ = conn.send_datagram(bytes::Bytes::from(msg.into_bytes()));
                 }
             }
 

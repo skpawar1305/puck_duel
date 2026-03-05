@@ -23,6 +23,11 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1.49.0", features = ["full"] }
-local-ip-address = "0.6.10"
-futures-util = { version = "0.3.32", features = ["sink"] }
+iroh = "0.96.1"
+bytes = "1"
+reqwest = { version = "0.12", features = ["json"] }
+mdns-sd = "0.18"
+base64 = "0.22"
+rand = "0.8"
+hex = "0.4"
 

@@ -2,48 +2,66 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import Game from "$lib/components/Game.svelte";
-  import QRScanner from "$lib/components/QRScanner.svelte";
   import { onMount, onDestroy, flushSync } from "svelte";
-  import QRCode from "qrcode";
   import { initAudio } from "$lib/audio";
 
   let screen = $state<"menu" | "host" | "join" | "game" | "online_host" | "online_join">("menu");
   let isHost = $state(false);
   let isSinglePlayer = $state(false);
-  let isOnline = $state(false);
 
-  // Network State
-  let qrCodes = $state<{ ip: string; url: string }[]>([]);
-  let remoteServerIp = $state("");
+  // LAN join — list of discovered peers { name, nodeAddrJson }
+  let discoveredPeers = $state<{ name: string; nodeAddrJson: string }[]>([]);
+  let connectingPeer = $state<string | null>(null);
 
-  // Online State
+  // Online state
   let roomCode = $state("");
   let joinCode = $state("");
   let onlineConnecting = $state(false);
   let onlineError = $state("");
 
+  // ── LAN Host ─────────────────────────────────────────────────────────
   async function startHost() {
     initAudio();
     isHost = true;
+    screen = "host";
     try {
-      const ips = (await invoke("get_local_ips")) as string[];
-
-      const codes = [];
-      for (const ip of ips) {
-        const url = await QRCode.toDataURL(ip, { width: 200, margin: 2 });
-        codes.push({ ip, url });
-      }
-      qrCodes = codes;
-
-      await invoke("start_udp_host");
-
-      screen = "host";
+      // Register our mDNS service and start browsing
+      await invoke("discover_lan");
+      // Accept exactly one incoming QUIC connection (peer-connected fires on success)
+      await invoke("start_accept_loop");
     } catch (e) {
       console.error(e);
-      alert("Failed to start host");
+      alert("Failed to start host: " + e);
+      screen = "menu";
     }
   }
 
+  // ── LAN Join ─────────────────────────────────────────────────────────
+  async function startJoin() {
+    initAudio();
+    isHost = false;
+    discoveredPeers = [];
+    screen = "join";
+    try {
+      // Register our mDNS service and browse for the host (emits peer-discovered events)
+      await invoke("discover_lan");
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function connectToPeer(nodeAddrJson: string, label: string) {
+    connectingPeer = label;
+    try {
+      await invoke("connect_to_peer", { nodeAddrJson });
+      // peer-connected event will fire → screen = "game"
+    } catch (e: any) {
+      connectingPeer = null;
+      alert("Failed to connect: " + e);
+    }
+  }
+
+  // ── Single Player ─────────────────────────────────────────────────────
   function startSinglePlayer() {
     initAudio();
     isHost = true;
@@ -51,22 +69,15 @@
     screen = "game";
   }
 
-  function startJoin() {
-    initAudio();
-    isHost = false;
-    isSinglePlayer = false;
-    screen = "join";
-  }
-
+  // ── Online Host ───────────────────────────────────────────────────────
   async function startOnlineHost() {
     initAudio();
     isHost = true;
-    isOnline = true;
     onlineError = "";
     onlineConnecting = true;
     screen = "online_host";
     try {
-      roomCode = await invoke("connect_relay_host") as string;
+      roomCode = (await invoke("host_online")) as string;
     } catch (e: any) {
       onlineError = e?.toString() ?? "Failed to connect";
     } finally {
@@ -74,10 +85,10 @@
     }
   }
 
+  // ── Online Join ────────────────────────────────────────────────────────
   function startOnlineJoin() {
     initAudio();
     isHost = false;
-    isOnline = true;
     isSinglePlayer = false;
     onlineError = "";
     joinCode = "";
@@ -89,54 +100,39 @@
     onlineConnecting = true;
     onlineError = "";
     try {
-      await invoke("connect_relay_join", { roomCode: joinCode.trim() });
-      screen = "game";
+      await invoke("join_online", { roomCode: joinCode.trim() });
+      // peer-connected event fires → screen = "game"
     } catch (e: any) {
       onlineError = e?.toString() ?? "Failed to join";
-    } finally {
       onlineConnecting = false;
     }
   }
 
-  async function onQrScanned(ip: string) {
-    if (ip && ip.includes(".")) {
-      remoteServerIp = ip;
-
-      // Connect UDP
-      try {
-        await invoke("connect_udp_client", { hostIp: ip });
-        console.log("Connected to UDP Host at", ip);
-        screen = "game";
-      } catch (e) {
-        console.error("Failed to connect UDP client", e);
-      }
-    }
-  }
-
-  // Once host receives an event, it switches screen
-  let unlisten: UnlistenFn | null = null;
-  let unlistenRelay: UnlistenFn | null = null;
-  let clientConnected = $state(false);
+  // ── Event listeners ────────────────────────────────────────────────────
+  let unlistenPeerConnected: UnlistenFn | null = null;
+  let unlistenPeerDiscovered: UnlistenFn | null = null;
 
   onMount(async () => {
-    unlisten = await listen<[string, string]>("udp-msg-received", (event) => {
-      // If we are Host waiting on QR Code screen, any payload means client joined
-      if (isHost && screen === "host") {
-        clientConnected = true;
-        initAudio();
-        flushSync(() => { screen = "game"; });
-      }
+    // Any peer-connected event navigates to game (works for LAN and online)
+    unlistenPeerConnected = await listen("peer-connected", () => {
+      connectingPeer = null;
+      flushSync(() => { screen = "game"; });
     });
-    unlistenRelay = await listen("relay-peer-connected", () => {
-      if (isHost && screen === "online_host") {
-        flushSync(() => { screen = "game"; });
+
+    // Discovered LAN peers — accumulate into list (avoid duplicates by nodeAddrJson)
+    unlistenPeerDiscovered = await listen<string>("peer-discovered", (event) => {
+      const nodeAddrJson = event.payload;
+      if (!discoveredPeers.some(p => p.nodeAddrJson === nodeAddrJson)) {
+        // Use a short label for display
+        const label = "Peer " + (discoveredPeers.length + 1);
+        discoveredPeers = [...discoveredPeers, { name: label, nodeAddrJson }];
       }
     });
   });
 
   onDestroy(() => {
-    if (unlisten) unlisten();
-    if (unlistenRelay) unlistenRelay();
+    if (unlistenPeerConnected) unlistenPeerConnected();
+    if (unlistenPeerDiscovered) unlistenPeerDiscovered();
   });
 </script>
 
@@ -159,7 +155,7 @@
       <button
         class="w-full py-4 bg-emerald-600 text-white rounded-2xl text-lg font-bold hover:bg-emerald-500 active:scale-95 shadow-[0_0_24px_rgba(5,150,105,0.4)] transition-all uppercase tracking-widest"
         onclick={startJoin}
-      >📷 Join (Local)</button>
+      >📡 Join (Local)</button>
       <div class="w-full border-t border-neutral-700 my-1"></div>
       <button
         class="w-full py-4 bg-orange-600 text-white rounded-2xl text-lg font-bold hover:bg-orange-500 active:scale-95 shadow-[0_0_24px_rgba(234,88,12,0.4)] transition-all uppercase tracking-widest"
@@ -175,58 +171,55 @@
         onclick={startSinglePlayer}
       >🤖 vs AI</button>
     </div>
+
   {:else if screen === "host"}
     <div class="flex flex-col gap-5 items-center text-center p-8 w-full max-w-sm">
       <div class="text-3xl animate-pulse">⏳</div>
       <h2 class="text-2xl font-black text-cyan-400">Waiting for opponent…</h2>
-      <p class="text-neutral-500 text-sm">Have them scan this QR code</p>
-      {#if qrCodes.length > 0}
-        <div class="flex flex-col gap-4 items-center w-full">
-          {#each qrCodes as code}
-            <div class="bg-white p-4 rounded-2xl shadow-xl">
-              <img src={code.url} alt="QR Code" class="w-52 h-52" />
-              <p class="text-xs font-mono text-black text-center mt-2 font-bold">{code.ip}</p>
-            </div>
-          {/each}
-        </div>
-      {/if}
+      <p class="text-neutral-500 text-sm">Make sure both devices are on the same Wi-Fi network</p>
+      <p class="text-neutral-600 text-xs">Broadcasting via mDNS · Listening for peer</p>
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-2"
         onclick={() => (screen = "menu")}
       >Cancel</button>
     </div>
+
   {:else if screen === "join"}
-    <div class="flex flex-col gap-4 items-center w-full h-full p-6 pt-10">
-      <h2 class="text-2xl font-black text-emerald-400">Scan Host QR Code</h2>
-      <div class="w-full max-w-sm aspect-square rounded-3xl overflow-hidden shadow-2xl bg-black border-2 border-emerald-600/50 relative">
-        <QRScanner onScan={onQrScanned} />
-        <div class="absolute inset-10 border-2 border-emerald-400 rounded-xl pointer-events-none opacity-60"></div>
-      </div>
-      <p class="text-neutral-500 text-xs">— or enter IP manually —</p>
-      <div class="flex gap-2 w-full max-w-sm">
-        <input
-          type="text"
-          placeholder="192.168.x.x"
-          bind:value={remoteServerIp}
-          class="flex-1 px-4 py-3 bg-neutral-800 text-white rounded-xl border border-neutral-600 focus:border-emerald-500 outline-none font-mono text-sm"
-          onkeydown={(e) => e.key === 'Enter' && onQrScanned(remoteServerIp)}
-        />
-        <button
-          class="px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 active:scale-95"
-          onclick={() => onQrScanned(remoteServerIp)}
-        >Connect</button>
-      </div>
+    <div class="flex flex-col gap-4 items-center w-full p-8 max-w-sm">
+      <h2 class="text-2xl font-black text-emerald-400">Join (Local)</h2>
+      <p class="text-neutral-500 text-sm text-center">Discovering hosts on your Wi-Fi network…</p>
+
+      {#if discoveredPeers.length === 0}
+        <div class="flex items-center gap-2 text-neutral-400 text-sm mt-4 animate-pulse">
+          <span>🔍</span>
+          <span>Scanning…</span>
+        </div>
+      {:else}
+        <div class="w-full flex flex-col gap-3 mt-2">
+          {#each discoveredPeers as peer}
+            <button
+              class="w-full py-4 bg-emerald-700 text-white rounded-2xl text-base font-bold hover:bg-emerald-600 active:scale-95 disabled:opacity-50 transition-all"
+              disabled={connectingPeer !== null}
+              onclick={() => connectToPeer(peer.nodeAddrJson, peer.name)}
+            >
+              {connectingPeer === peer.name ? "Connecting…" : "🎮 " + peer.name}
+            </button>
+          {/each}
+        </div>
+      {/if}
+
       <button
-        class="w-full max-w-sm py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"
-        onclick={() => (screen = "menu")}
+        class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-4"
+        onclick={() => { connectingPeer = null; screen = "menu"; }}
       >Cancel</button>
     </div>
+
   {:else if screen === "online_host"}
     <div class="flex flex-col gap-5 items-center text-center p-8 w-full max-w-sm">
       <div class="text-3xl animate-pulse">🌍</div>
       <h2 class="text-2xl font-black text-orange-400">Online — Host</h2>
       {#if onlineConnecting}
-        <p class="text-neutral-400 text-sm">Connecting to relay…</p>
+        <p class="text-neutral-400 text-sm">Registering with signaling server…</p>
       {:else if onlineError}
         <p class="text-red-400 text-sm">{onlineError}</p>
       {:else if roomCode}
@@ -238,20 +231,21 @@
       {/if}
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-2"
-        onclick={() => { invoke("disconnect_relay").catch(() => {}); screen = "menu"; }}
+        onclick={() => (screen = "menu")}
       >Cancel</button>
     </div>
+
   {:else if screen === "online_join"}
     <div class="flex flex-col gap-5 items-center text-center p-8 w-full max-w-sm">
       <div class="text-3xl">🔑</div>
       <h2 class="text-2xl font-black text-yellow-400">Online — Join</h2>
-      <p class="text-neutral-400 text-sm">Enter the 4-digit code from your friend</p>
+      <p class="text-neutral-400 text-sm">Enter the 6-character code from your friend</p>
       <input
         type="text"
-        maxlength="4"
-        placeholder="1234"
+        maxlength="6"
+        placeholder="ABC123"
         bind:value={joinCode}
-        class="w-full px-6 py-5 bg-neutral-800 text-white rounded-2xl border border-neutral-600 focus:border-yellow-500 outline-none font-mono text-4xl font-black tracking-widest text-center"
+        class="w-full px-6 py-5 bg-neutral-800 text-white rounded-2xl border border-neutral-600 focus:border-yellow-500 outline-none font-mono text-4xl font-black tracking-widest text-center uppercase"
         onkeydown={(e) => e.key === 'Enter' && joinOnlineRoom()}
       />
       {#if onlineError}
@@ -260,19 +254,19 @@
       <button
         class="w-full py-4 bg-yellow-600 text-white rounded-2xl text-lg font-bold hover:bg-yellow-500 active:scale-95 disabled:opacity-40 uppercase tracking-widest"
         onclick={joinOnlineRoom}
-        disabled={onlineConnecting || joinCode.length < 4}
+        disabled={onlineConnecting || joinCode.length < 6}
       >{onlineConnecting ? "Connecting…" : "Join"}</button>
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"
         onclick={() => (screen = "menu")}
       >Cancel</button>
     </div>
+
   {:else if screen === "game"}
     <div class="absolute inset-0 w-full h-full">
-      <Game {isHost} {isSinglePlayer} {isOnline} onBack={() => {
-        screen = 'menu';
+      <Game {isHost} {isSinglePlayer} onBack={() => {
+        screen = "menu";
         isSinglePlayer = false;
-        if (isOnline) { invoke("disconnect_relay").catch(() => {}); isOnline = false; }
       }} />
     </div>
   {/if}
@@ -285,6 +279,6 @@
     font-family: "Inter", system-ui, sans-serif;
     user-select: none;
     -webkit-user-select: none;
-    touch-action: none; /* Crucial for games to prevent zooming/scrolling */
+    touch-action: none;
   }
 </style>
