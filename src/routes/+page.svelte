@@ -4,13 +4,15 @@
   import Game from "$lib/components/Game.svelte";
   import { onMount, onDestroy, flushSync } from "svelte";
   import { initAudio } from "$lib/audio";
+  import QRCode from 'qrcode';
+  import QRScanner from '$lib/components/QRScanner.svelte';
 
   let screen = $state<"menu" | "host" | "join" | "game" | "online_host" | "online_join">("menu");
   let isHost = $state(false);
   let isSinglePlayer = $state(false);
 
-  // LAN join — list of discovered peers { name, nodeAddrJson }
-  let discoveredPeers = $state<{ name: string; nodeAddrJson: string }[]>([]);
+  // LAN
+  let lanQrDataUrl = $state('');
   let connectingPeer = $state<string | null>(null);
 
   // Online state
@@ -23,11 +25,11 @@
   async function startHost() {
     initAudio();
     isHost = true;
+    lanQrDataUrl = '';
     screen = "host";
     try {
-      // Register our mDNS service and start browsing
-      await invoke("discover_lan");
-      // Accept exactly one incoming QUIC connection (peer-connected fires on success)
+      const nodeAddrJson = (await invoke("get_our_node_addr")) as string;
+      lanQrDataUrl = await QRCode.toDataURL(nodeAddrJson, { width: 240, margin: 1 });
       await invoke("start_accept_loop");
     } catch (e) {
       console.error(e);
@@ -40,18 +42,13 @@
   async function startJoin() {
     initAudio();
     isHost = false;
-    discoveredPeers = [];
+    connectingPeer = null;
     screen = "join";
-    try {
-      // Register our mDNS service and browse for the host (emits peer-discovered events)
-      await invoke("discover_lan");
-    } catch (e) {
-      console.error(e);
-    }
   }
 
-  async function connectToPeer(nodeAddrJson: string, label: string) {
-    connectingPeer = label;
+  async function handleScan(nodeAddrJson: string) {
+    if (connectingPeer) return;
+    connectingPeer = "peer";
     try {
       await invoke("connect_to_peer", { nodeAddrJson });
       // peer-connected event will fire → screen = "game"
@@ -110,29 +107,24 @@
 
   // ── Event listeners ────────────────────────────────────────────────────
   let unlistenPeerConnected: UnlistenFn | null = null;
-  let unlistenPeerDiscovered: UnlistenFn | null = null;
+  let unlistenJoinError: UnlistenFn | null = null;
 
   onMount(async () => {
-    // Any peer-connected event navigates to game (works for LAN and online)
     unlistenPeerConnected = await listen("peer-connected", () => {
       connectingPeer = null;
+      onlineConnecting = false;
       flushSync(() => { screen = "game"; });
     });
 
-    // Discovered LAN peers — accumulate into list (avoid duplicates by nodeAddrJson)
-    unlistenPeerDiscovered = await listen<string>("peer-discovered", (event) => {
-      const nodeAddrJson = event.payload;
-      if (!discoveredPeers.some(p => p.nodeAddrJson === nodeAddrJson)) {
-        // Use a short label for display
-        const label = "Peer " + (discoveredPeers.length + 1);
-        discoveredPeers = [...discoveredPeers, { name: label, nodeAddrJson }];
-      }
+    unlistenJoinError = await listen<string>("join-error", (event) => {
+      onlineError = event.payload;
+      onlineConnecting = false;
     });
   });
 
   onDestroy(() => {
     if (unlistenPeerConnected) unlistenPeerConnected();
-    if (unlistenPeerDiscovered) unlistenPeerDiscovered();
+    if (unlistenJoinError) unlistenJoinError();
   });
 </script>
 
@@ -174,40 +166,31 @@
 
   {:else if screen === "host"}
     <div class="flex flex-col gap-5 items-center text-center p-8 w-full max-w-sm">
-      <div class="text-3xl animate-pulse">⏳</div>
-      <h2 class="text-2xl font-black text-cyan-400">Waiting for opponent…</h2>
-      <p class="text-neutral-500 text-sm">Make sure both devices are on the same Wi-Fi network</p>
-      <p class="text-neutral-600 text-xs">Broadcasting via mDNS · Listening for peer</p>
+      <h2 class="text-2xl font-black text-cyan-400">Host (Local)</h2>
+      {#if lanQrDataUrl}
+        <p class="text-neutral-400 text-sm">Ask your friend to scan this QR code</p>
+        <img src={lanQrDataUrl} alt="QR code" class="rounded-2xl w-48 h-48" />
+        <p class="text-neutral-500 text-xs animate-pulse">Waiting for opponent…</p>
+      {:else}
+        <div class="text-3xl animate-pulse">⏳</div>
+        <p class="text-neutral-500 text-sm">Generating QR code…</p>
+      {/if}
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-2"
-        onclick={() => (screen = "menu")}
+        onclick={async () => { await invoke('cancel_online').catch(() => {}); screen = "menu"; }}
       >Cancel</button>
     </div>
 
   {:else if screen === "join"}
     <div class="flex flex-col gap-4 items-center w-full p-8 max-w-sm">
       <h2 class="text-2xl font-black text-emerald-400">Join (Local)</h2>
-      <p class="text-neutral-500 text-sm text-center">Discovering hosts on your Wi-Fi network…</p>
-
-      {#if discoveredPeers.length === 0}
-        <div class="flex items-center gap-2 text-neutral-400 text-sm mt-4 animate-pulse">
-          <span>🔍</span>
-          <span>Scanning…</span>
-        </div>
+      {#if connectingPeer}
+        <div class="text-3xl animate-pulse">🔗</div>
+        <p class="text-neutral-400 text-sm">Connecting…</p>
       {:else}
-        <div class="w-full flex flex-col gap-3 mt-2">
-          {#each discoveredPeers as peer}
-            <button
-              class="w-full py-4 bg-emerald-700 text-white rounded-2xl text-base font-bold hover:bg-emerald-600 active:scale-95 disabled:opacity-50 transition-all"
-              disabled={connectingPeer !== null}
-              onclick={() => connectToPeer(peer.nodeAddrJson, peer.name)}
-            >
-              {connectingPeer === peer.name ? "Connecting…" : "🎮 " + peer.name}
-            </button>
-          {/each}
-        </div>
+        <p class="text-neutral-500 text-sm text-center">Scan the host's QR code</p>
+        <QRScanner onScan={handleScan} />
       {/if}
-
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-4"
         onclick={() => { connectingPeer = null; screen = "menu"; }}
@@ -239,13 +222,16 @@
     <div class="flex flex-col gap-5 items-center text-center p-8 w-full max-w-sm">
       <div class="text-3xl">🔑</div>
       <h2 class="text-2xl font-black text-yellow-400">Online — Join</h2>
-      <p class="text-neutral-400 text-sm">Enter the 6-character code from your friend</p>
+      <p class="text-neutral-400 text-sm">Enter the 4-digit code from your friend</p>
       <input
         type="text"
-        maxlength="6"
-        placeholder="ABC123"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        maxlength="4"
+        placeholder="0000"
         bind:value={joinCode}
-        class="w-full px-6 py-5 bg-neutral-800 text-white rounded-2xl border border-neutral-600 focus:border-yellow-500 outline-none font-mono text-4xl font-black tracking-widest text-center uppercase"
+        oninput={(e) => { joinCode = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 4); }}
+        class="w-full px-6 py-5 bg-neutral-800 text-white rounded-2xl border border-neutral-600 focus:border-yellow-500 outline-none font-mono text-4xl font-black tracking-widest text-center"
         onkeydown={(e) => e.key === 'Enter' && joinOnlineRoom()}
       />
       {#if onlineError}
@@ -254,7 +240,7 @@
       <button
         class="w-full py-4 bg-yellow-600 text-white rounded-2xl text-lg font-bold hover:bg-yellow-500 active:scale-95 disabled:opacity-40 uppercase tracking-widest"
         onclick={joinOnlineRoom}
-        disabled={onlineConnecting || joinCode.length < 6}
+        disabled={onlineConnecting || joinCode.length < 4}
       >{onlineConnecting ? "Connecting…" : "Join"}</button>
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"

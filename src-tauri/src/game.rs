@@ -118,10 +118,11 @@ struct GameState {
     goal_scored:u8,
     countdown:  f32,
 
-    // authority tracking — snap on handoff
-    prev_auth:   bool,
-    is_host:     bool,
-    is_single:   bool,
+    // authority tracking
+    prev_auth:           bool,
+    prev_recv_host_auth: bool, // last received isHostAuth — detect handoff transitions
+    is_host:             bool,
+    is_single:           bool,
 }
 
 impl GameState {
@@ -137,24 +138,20 @@ impl GameState {
             wall_flash:0.0, goal_flash:0.0, score_flash:[0.0,0.0],
             hit:0, wall_hit:0, goal_scored:0, countdown: 3.0,
             prev_auth: is_single || is_host,
+            prev_recv_host_auth: true, // host starts authoritative
             is_host, is_single,
         }
     }
 
     fn auth(&self) -> bool {
         if self.is_single { return true; }
-        // Hysteresis: once you have authority, keep it 80px past midline into
-        // opponent's half before releasing. Gain it only 80px into your own half.
-        // This reduces handoff frequency and gives the new owner a clean momentum snapshot.
-        const HYST: f32 = 80.0;
+        // Use target_puck.y (network-ground-truth): ensures exactly ONE side is
+        // authoritative at all times. On auth frames we echo target_puck = puck,
+        // so this is always fresh. On non-auth frames it reflects the peer's last
+        // sent position — the definitive record of which half the puck is in.
         let y = self.target_puck.y;
-        if self.is_host {
-            if self.prev_auth { y >= TH / 2.0 - HYST } // hold until well into client half
-            else              { y >= TH / 2.0 + HYST } // gain only when clearly in host half
-        } else {
-            if self.prev_auth { y <  TH / 2.0 + HYST } // hold until well into host half
-            else              { y <  TH / 2.0 - HYST } // gain only when clearly in client half
-        }
+        if self.is_host { y >= TH / 2.0 }
+        else            { y <  TH / 2.0 }
     }
 
     fn reset_puck(&mut self) {
@@ -200,8 +197,8 @@ impl GameState {
         } else {
             let op = if self.is_host { &mut self.client_paddle } else { &mut self.host_paddle };
             let (opx, opy) = (op.x, op.y);
-            op.x += (self.target_opponent[0] - op.x) * 0.25;
-            op.y += (self.target_opponent[1] - op.y) * 0.25;
+            op.x += (self.target_opponent[0] - op.x) * 0.5;
+            op.y += (self.target_opponent[1] - op.y) * 0.5;
             op.pvx = (op.x - opx) / dt;
             op.pvy = (op.y - opy) / dt;
         }
@@ -210,7 +207,10 @@ impl GameState {
         let auth_now = self.auth();
 
         if auth_now && self.countdown == 0.0 {
-            // Just gained authority — start from peer's last ground-truth state
+            // Just gained authority — snap to peer's last known position so our local puck.y
+            // is on the correct side of the midline. Without this snap, the dead-reckoned
+            // puck.y might be on the wrong side, the echo would flip target_puck wrong,
+            // and auth() would immediately drop authority on the very next frame.
             if !self.prev_auth {
                 self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
                 self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
@@ -253,12 +253,12 @@ impl GameState {
             wh |= collide_goal_post(&mut self.puck, GX+GOAL_W,    TH);
             if wh { self.wall_hit = 1; self.wall_flash = 1.0; }
 
-            // Goals
-            if self.puck.y < -20.0 {
+            // Goals — score when puck centre crosses the goal line
+            if self.puck.y < 0.0 {
                 self.score[0] += 1; self.goal_scored = 1;
                 self.goal_flash = 1.0; self.score_flash[0] = 1.0;
                 self.reset_puck(); self.countdown = 2.5;
-            } else if self.puck.y > TH + 20.0 {
+            } else if self.puck.y > TH {
                 self.score[1] += 1; self.goal_scored = 1;
                 self.goal_flash = 1.0; self.score_flash[1] = 1.0;
                 self.reset_puck(); self.countdown = 2.5;
@@ -273,9 +273,21 @@ impl GameState {
             // Speed clamp (max only)
             let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
             if cs > MAX_SPEED { self.puck.vx=self.puck.vx/cs*MAX_SPEED; self.puck.vy=self.puck.vy/cs*MAX_SPEED; }
+
+            // Echo authoritative puck into target_puck so auth() stays stable next frame
+            // (prevents stale target_puck from causing false authority loss after a goal reset)
+            self.target_puck = self.puck.clone();
+
         } else if auth_now {
             // Auth but in countdown: puck already at center from reset_puck(), hold it there.
-            // Do NOT blend toward target_puck — it may be stale from before the goal.
+            // Echo so auth() sees center next frame and doesn't incorrectly drop authority.
+            self.target_puck = self.puck.clone();
+
+        } else if self.countdown > 0.0 {
+            // Non-auth during countdown: snap immediately to whatever auth sent (should be center).
+            self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
+            self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
+
         } else {
             // Dead reckoning — blend toward peer's authoritative state
             self.puck.x += self.puck.vx * dt;
@@ -292,9 +304,9 @@ impl GameState {
                 if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; }
                 else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; }
             }
-            // Puck passed a goal — snap locally to center immediately,
-            // and zero target_puck so the blend doesn't re-apply the old velocity.
-            if self.puck.y < -20.0 || self.puck.y > TH + 20.0 {
+            // Dead-reckoned puck passed a goal — snap to center immediately;
+            // auth side will send the score + reset shortly via net.
+            if self.puck.y < 0.0 || self.puck.y > TH {
                 self.reset_puck();
                 self.target_puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
             }
@@ -305,7 +317,6 @@ impl GameState {
             let err = (ex*ex + ey*ey).sqrt();
 
             // If peer already reset puck to center (after goal), snap immediately
-            // rather than dead-reckoning the puck flying off screen for 100ms
             let peer_reset = (self.target_puck.x - TW/2.0).abs() < 10.0
                 && (self.target_puck.y - TH/2.0).abs() < 10.0
                 && self.target_puck.vx.abs() < 1.0
@@ -347,67 +358,108 @@ impl GameState {
         }
     }
 
-    /// Network message to broadcast/send this frame (authoritative side only)
     fn net_msg(&self) -> Option<String> {
         if self.is_single { return None; }
+        // Always send puck + isHostAuth every packet.
+        // Receiver ignores puck data unless isHostAuth matches who should be sending.
+        // This eliminates the linger/missed-handoff problem entirely.
+        let is_host_auth = if self.is_host { self.prev_auth } else { !self.prev_auth };
         if self.is_host {
-            let msg = serde_json::json!({
+            Some(serde_json::json!({
                 "type": "state",
                 "hostPaddle": [self.host_paddle.x, self.host_paddle.y],
-                "puck": [self.puck.x, self.puck.y],
-                "vel":  [self.puck.vx, self.puck.vy],
-                "score": self.score
-            });
-            Some(msg.to_string())
+                "puck":       [self.puck.x, self.puck.y],
+                "vel":        [self.puck.vx, self.puck.vy],
+                "score":      self.score,
+                "countdown":  self.countdown,
+                "isHostAuth": is_host_auth,
+            }).to_string())
         } else {
-            let mut m = serde_json::json!({
+            Some(serde_json::json!({
                 "type": "input",
-                "pos": [self.client_paddle.x, self.client_paddle.y]
-            });
-            if self.auth() {
-                m["puck"]  = serde_json::json!([self.puck.x, self.puck.y]);
-                m["vel"]   = serde_json::json!([self.puck.vx, self.puck.vy]);
-                m["score"] = serde_json::json!(self.score);
-            }
-            Some(m.to_string())
+                "pos":        [self.client_paddle.x, self.client_paddle.y],
+                "puck":       [self.puck.x, self.puck.y],
+                "vel":        [self.puck.vx, self.puck.vy],
+                "score":      self.score,
+                "countdown":  self.countdown,
+                "isHostAuth": is_host_auth,
+            }).to_string())
         }
     }
 
     fn apply_net(&mut self, msg: &str) {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else { return };
+        // isHostAuth: true = host is currently authoritative
+        let is_host_auth = v["isHostAuth"].as_bool().unwrap_or(true);
+        // Detect authority transitions — on a handoff, always accept puck data even
+        // if the sender just dropped authority. This ensures packet loss of the last
+        // auth packet doesn't cause a permanent deadlock: the first non-auth packet
+        // from the old owner still delivers the crossing position.
+        let auth_changed = is_host_auth != self.prev_recv_host_auth;
+        self.prev_recv_host_auth = is_host_auth;
+
+        // Parse received score for use in both branches (needed for stale-packet guard)
+        let recv_score = v["score"].as_array().map(|s| [
+            s[0].as_u64().unwrap_or(0) as u32,
+            s[1].as_u64().unwrap_or(0) as u32,
+        ]);
+        // A packet is from a past round if its score sum is less than ours — any countdown
+        // value in it predates the current goal and must be ignored to prevent a post-goal
+        // countdown=2.5 from being overwritten by a stale countdown=0.
+        let recv_sum   = recv_score.map_or(0, |s| s[0] + s[1]);
+        let local_sum  = self.score[0] + self.score[1];
+        let fresh_round = recv_sum >= local_sum;
+
         if self.is_host && v["type"] == "input" {
             if let Some(pos) = v["pos"].as_array() {
                 self.target_opponent = [pos[0].as_f64().unwrap_or(0.0) as f32,
                                         pos[1].as_f64().unwrap_or(0.0) as f32];
             }
-            if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                self.target_puck = Puck {
-                    x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                    y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                    vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                    vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                };
+            // Score always applies via max (safe — can only increase)
+            if let Some(s) = recv_score {
+                self.score[0] = self.score[0].max(s[0]);
+                self.score[1] = self.score[1].max(s[1]);
             }
-            if let Some(s) = v["score"].as_array() {
-                self.score = [s[0].as_u64().unwrap_or(0) as u32,
-                              s[1].as_u64().unwrap_or(0) as u32];
+            // Accept puck+countdown from client when: client is auth (!is_host_auth) OR authority just changed
+            if !is_host_auth || auth_changed {
+                if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
+                    self.target_puck = Puck {
+                        x:  p[0].as_f64().unwrap_or(0.0) as f32,
+                        y:  p[1].as_f64().unwrap_or(0.0) as f32,
+                        vx: vel[0].as_f64().unwrap_or(0.0) as f32,
+                        vy: vel[1].as_f64().unwrap_or(0.0) as f32,
+                    };
+                }
+                // Sync countdown from auth freely, but reject stale pre-goal packets
+                // (those have recv_sum < local_sum and would carry countdown=0 after a goal).
+                if fresh_round {
+                    if let Some(c) = v["countdown"].as_f64() { self.countdown = c as f32; }
+                }
             }
         } else if !self.is_host && v["type"] == "state" {
             if let Some(hp) = v["hostPaddle"].as_array() {
                 self.target_opponent = [hp[0].as_f64().unwrap_or(0.0) as f32,
                                         hp[1].as_f64().unwrap_or(0.0) as f32];
             }
-            if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                self.target_puck = Puck {
-                    x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                    y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                    vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                    vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                };
+            // Score always applies via max
+            if let Some(s) = recv_score {
+                self.score[0] = self.score[0].max(s[0]);
+                self.score[1] = self.score[1].max(s[1]);
             }
-            if let Some(s) = v["score"].as_array() {
-                self.score = [s[0].as_u64().unwrap_or(0) as u32,
-                              s[1].as_u64().unwrap_or(0) as u32];
+            // Accept puck+countdown from host when: host is auth (is_host_auth) OR authority just changed
+            if is_host_auth || auth_changed {
+                if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
+                    self.target_puck = Puck {
+                        x:  p[0].as_f64().unwrap_or(0.0) as f32,
+                        y:  p[1].as_f64().unwrap_or(0.0) as f32,
+                        vx: vel[0].as_f64().unwrap_or(0.0) as f32,
+                        vy: vel[1].as_f64().unwrap_or(0.0) as f32,
+                    };
+                }
+                // Sync countdown from auth freely, but reject stale pre-goal packets
+                if fresh_round {
+                    if let Some(c) = v["countdown"].as_f64() { self.countdown = c as f32; }
+                }
             }
         }
     }
@@ -468,9 +520,12 @@ pub async fn start_game(
             let ptr = *pointer.lock().unwrap();
             gs.update(dt, ptr);
 
-            // Send every frame (60 Hz) — fire-and-forget QUIC datagram
+            // Send every frame — ~14KB/s total, trivial for LAN and QUIC.
+            // Throttling to 30Hz was causing authority deadlocks: the echo could
+            // cross the midline on a non-send frame, dropping authority without
+            // ever notifying the peer, leaving both sides non-authoritative.
             if let Some(msg) = gs.net_msg() {
-                if let Some(ref conn) = *connection.blocking_lock() {
+                if let Some(ref conn) = *connection.lock().await {
                     let _ = conn.send_datagram(bytes::Bytes::from(msg.into_bytes()));
                 }
             }

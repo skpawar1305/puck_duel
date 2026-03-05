@@ -6,8 +6,6 @@ use iroh::endpoint::Connection;
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{broadcast, Mutex, OnceCell};
-use rand::distributions::Alphanumeric;
-use rand::Rng;
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 
 /// ALPN protocol identifier for Puck Duel
@@ -29,6 +27,8 @@ pub struct TransportState {
     pub connection: Arc<Mutex<Option<Connection>>>,
     /// Broadcast channel — received datagrams are decoded to UTF-8 and sent here
     pub msg_tx: broadcast::Sender<String>,
+    /// Background task handle (accept loop / join task) — abort to cancel
+    pub bg_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl TransportState {
@@ -38,6 +38,7 @@ impl TransportState {
             endpoint: OnceCell::new(),
             connection: Arc::new(Mutex::new(None)),
             msg_tx,
+            bg_task: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -213,7 +214,10 @@ pub async fn start_accept_loop(
     let transport_conn = transport.connection.clone();
     let msg_tx = transport.msg_tx.clone();
 
-    tokio::spawn(async move {
+    // Abort any previous background task
+    if let Some(old) = transport.bg_task.lock().await.take() { old.abort(); }
+
+    let handle = tokio::spawn(async move {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
         loop {
             match tokio::time::timeout_at(deadline, ep.accept()).await {
@@ -235,6 +239,7 @@ pub async fn start_accept_loop(
             }
         }
     });
+    *transport.bg_task.lock().await = Some(handle);
 
     Ok(())
 }
@@ -268,12 +273,8 @@ pub async fn host_online(
     let our_addr = ep.addr();
     let node_addr_json = addr_to_json(&our_addr)?;
 
-    // Generate a random 6-char uppercase room code
-    let code: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(6)
-        .map(|c| (c as char).to_ascii_uppercase())
-        .collect();
+    // Generate a random 4-digit numeric room code
+    let code: String = format!("{:04}", rand::random::<u32>() % 10000);
 
     // Post to Supabase
     let client = reqwest::Client::new();
@@ -299,7 +300,10 @@ pub async fn host_online(
     let transport_conn = transport.connection.clone();
     let msg_tx = transport.msg_tx.clone();
 
-    tokio::spawn(async move {
+    // Abort any previous background task
+    if let Some(old) = transport.bg_task.lock().await.take() { old.abort(); }
+
+    let handle = tokio::spawn(async move {
         // Wait up to 5 minutes for a peer to connect
         let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
         loop {
@@ -326,14 +330,15 @@ pub async fn host_online(
             }
         }
     });
+    *transport.bg_task.lock().await = Some(handle);
 
     Ok(code)
 }
 
 /// Join an online game by entering the host's room code.
 ///
-/// Polls Supabase until the room is found (up to 30s), then connects.
-/// Emits `peer-connected` on success.
+/// Spawns a background task that polls Supabase then connects via QUIC.
+/// Emits `peer-connected` on success or `join-error` on failure.
 #[tauri::command]
 pub async fn join_online(
     transport: State<'_, TransportState>,
@@ -341,49 +346,75 @@ pub async fn join_online(
     room_code: String,
 ) -> Result<(), String> {
     let code = room_code.trim().to_uppercase();
+    let ep = transport.endpoint().await?.clone();
+    let transport_conn = transport.connection.clone();
+    let msg_tx = transport.msg_tx.clone();
 
-    // Poll Supabase for up to 30 seconds
-    let client = reqwest::Client::new();
-    let url = format!(
-        "{}/rest/v1/rooms?code=eq.{}&select=node_addr",
-        SUPABASE_URL, code
-    );
+    // Abort any previous background task
+    if let Some(old) = transport.bg_task.lock().await.take() { old.abort(); }
 
-    let node_addr_json = {
+    let handle = tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let url = format!("{}/rest/v1/rooms?code=eq.{}&select=node_addr", SUPABASE_URL, code);
+
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        let mut result: Option<String> = None;
+        let mut node_addr_json: Option<String> = None;
         loop {
-            if tokio::time::Instant::now() >= deadline {
-                break;
-            }
-            let resp = client
+            if tokio::time::Instant::now() >= deadline { break; }
+            match client
                 .get(&url)
                 .header("apikey", SUPABASE_ANON_KEY)
                 .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
                 .send()
                 .await
-                .map_err(|e| format!("Supabase GET failed: {e}"))?;
-
-            #[derive(Deserialize)]
-            struct Row { node_addr: String }
-            let rows: Vec<Row> = resp
-                .json()
-                .await
-                .map_err(|e| format!("Supabase parse error: {e}"))?;
-
-            if let Some(row) = rows.into_iter().next() {
-                result = Some(row.node_addr);
-                break;
+            {
+                Ok(resp) => {
+                    #[derive(Deserialize)]
+                    struct Row { node_addr: String }
+                    if let Ok(rows) = resp.json::<Vec<Row>>().await {
+                        if let Some(row) = rows.into_iter().next() {
+                            node_addr_json = Some(row.node_addr);
+                            break;
+                        }
+                    }
+                }
+                Err(_) => {}
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        result.ok_or_else(|| format!("Room '{}' not found within 30s", code))?
-    };
 
-    let addr: EndpointAddr = addr_from_json(&node_addr_json)?;
-    let ep = transport.endpoint().await?;
-    let conn = ep.connect(addr, ALPN).await.map_err(|e| e.to_string())?;
-    activate_connection(&transport, conn, &app).await;
+        let json = match node_addr_json {
+            Some(j) => j,
+            None => {
+                let _ = app.emit("join-error", format!("Room '{}' not found", code));
+                return;
+            }
+        };
+
+        let addr = match addr_from_json(&json) {
+            Ok(a) => a,
+            Err(e) => { let _ = app.emit("join-error", e); return; }
+        };
+
+        match ep.connect(addr, ALPN).await {
+            Ok(conn) => {
+                *transport_conn.lock().await = Some(conn.clone());
+                spawn_recv_loop(conn, msg_tx);
+                let _ = app.emit("peer-connected", ());
+            }
+            Err(e) => { let _ = app.emit("join-error", e.to_string()); }
+        }
+    });
+    *transport.bg_task.lock().await = Some(handle);
+    Ok(())
+}
+
+/// Abort any pending background connection task (join or accept loop).
+#[tauri::command]
+pub async fn cancel_online(transport: State<'_, TransportState>) -> Result<(), String> {
+    if let Some(handle) = transport.bg_task.lock().await.take() {
+        handle.abort();
+    }
     Ok(())
 }
 

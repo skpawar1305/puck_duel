@@ -1,4 +1,6 @@
 .DS_Store
+release.keystore
+keystore.properties
 node_modules
 /build
 /.svelte-kit

@@ -2,7 +2,9 @@
     import { onMount, onDestroy } from "svelte";
     import { invoke } from "@tauri-apps/api/core";
     import { Channel } from "@tauri-apps/api/core";
-    import { playHit, playWall, playGoal, initAudio } from "$lib/audio";
+    import { playHit, playWall, playMyGoal, playOpponentGoal,
+             playNearMiss, playCountdownTick, playCountdownGo,
+             playWin, playLose, initAudio } from "$lib/audio";
 
     let {
         isHost,
@@ -66,6 +68,68 @@
     let lastPuckX = TW / 2,
         lastPuckY = TH / 2;
     let lastTime = 0;
+
+    // ── Audio tracking ────────────────────────────────────────────────────────
+    let prevScore: [number, number] = [0, 0];
+    let prevNumLit = -1;
+    let prevCountdownActive = true; // starts with countdown=3
+    let puckNearMyGoal = false;     // near-miss detection
+    let nearMissCooldown = 0;       // ms since last near-miss, prevent rapid firing
+
+    function handleAudio(state: RS) {
+        const myIdx = isHost ? 0 : 1;
+        const opIdx = isHost ? 1 : 0;
+
+        // Paddle hit — speed-modulated crunch
+        if (state.hit) {
+            if (!muted) playHit(state.puck_speed);
+            navigator.vibrate?.(12);
+        }
+        // Wall bounce
+        if (state.wall_hit) {
+            if (!muted) playWall();
+            navigator.vibrate?.(6);
+        }
+        // Goal — distinguish mine vs opponent's
+        if (state.goal_scored) {
+            const iScored = state.score[myIdx] > prevScore[myIdx];
+            if (!muted) iScored ? playMyGoal() : playOpponentGoal();
+            navigator.vibrate?.(iScored ? [50, 30, 80] : [40, 30, 40]);
+        }
+        prevScore = [state.score[0], state.score[1]];
+
+        // Near miss — puck was inside the goal gap and close to my goal line, but didn't score.
+        // Only triggers if puck was in the goal gap (x within posts) and within 12px of the line.
+        const inGap = state.puck[0] > GX && state.puck[0] < GX + GOAL_W;
+        const myGoalY = isHost ? TH - 12 : 12;
+        const nearNow = inGap && (isHost ? state.puck[1] > myGoalY : state.puck[1] < myGoalY);
+        nearMissCooldown = Math.max(0, nearMissCooldown - 33); // ~1 tick at 30Hz
+        if (puckNearMyGoal && !nearNow && !state.goal_scored && nearMissCooldown === 0) {
+            if (!muted) playNearMiss();
+            nearMissCooldown = 2000; // 2-second cooldown
+        }
+        puckNearMyGoal = nearNow;
+
+        // F1 countdown lights — tick per light, GO when lights out
+        if (state.countdown > 0) {
+            const numLit = Math.min(5, Math.floor((3.0 - state.countdown) / 0.5));
+            if (numLit > prevNumLit && numLit > 0) {
+                if (!muted) playCountdownTick();
+            }
+            prevNumLit = numLit;
+            prevCountdownActive = true;
+        } else if (prevCountdownActive) {
+            if (!muted) playCountdownGo();
+            prevNumLit = -1;
+            prevCountdownActive = false;
+        }
+
+        // Win / lose
+        if (!gameOver && (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)) {
+            const won = state.score[myIdx] >= WINNING_SCORE;
+            if (!muted) won ? playWin() : playLose();
+        }
+    }
 
     // ── Canvas ────────────────────────────────────────────────────────────────
     let canvas: HTMLCanvasElement;
@@ -292,28 +356,68 @@
         ctx.shadowBlur = 0;
 
         if (rs.countdown > 0) {
-            const n = Math.ceil(rs.countdown);
-            const pulse = rs.countdown % 1;
-            ctx.font = `900 ${100 - pulse * 30}px system-ui`;
-            ctx.textBaseline = "middle";
-            ctx.textAlign = "center";
-            ctx.fillStyle = `rgba(255,255,255,${0.4 + pulse * 0.6})`;
-            ctx.shadowColor = "rgba(255,255,255,0.7)";
-            ctx.shadowBlur = 30;
-            ctx.fillText(String(n), cw / 2, ch / 2);
-            ctx.shadowBlur = 0;
+            // F1-style lights: one light turns on every 0.5s, all go dark at 0 → GO
+            const numLit = Math.min(5, Math.floor((3.0 - rs.countdown) / 0.5));
+            const LIGHTS = 5, R = Math.round(cw * 0.055), GAP = Math.round(R * 0.55);
+            const totalW = LIGHTS * 2 * R + (LIGHTS - 1) * GAP;
+            const lx0 = cw / 2 - totalW / 2 + R;
+            const ly  = ch * 0.42;
+
+            // Dark panel
+            const pw = totalW + R * 1.6, ph = R * 2.8;
+            ctx.fillStyle = "rgba(0,0,0,0.82)";
+            ctx.beginPath();
+            ctx.roundRect(cw / 2 - pw / 2, ly - ph / 2, pw, ph, R * 0.35);
+            ctx.fill();
+
+            // Gantry bar
+            ctx.fillStyle = "#1a1a1a";
+            ctx.fillRect(cw / 2 - pw / 2, ly - 2, pw, 4);
+
+            for (let i = 0; i < LIGHTS; i++) {
+                const lxi = lx0 + i * (2 * R + GAP);
+                const lit = i < numLit;
+
+                if (lit) {
+                    // Red glow halo
+                    const g = ctx.createRadialGradient(lxi, ly, 0, lxi, ly, R * 2.2);
+                    g.addColorStop(0, "rgba(255,30,0,0.55)");
+                    g.addColorStop(1, "rgba(255,0,0,0)");
+                    ctx.fillStyle = g;
+                    ctx.beginPath();
+                    ctx.arc(lxi, ly, R * 2.2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowColor = "#ff2200";
+                    ctx.shadowBlur = R;
+                    ctx.fillStyle = "#ff2200";
+                } else {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = "#220800";
+                }
+
+                ctx.beginPath();
+                ctx.arc(lxi, ly, R, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Housing ring
+                ctx.strokeStyle = lit ? "#ff6644" : "#3a1a14";
+                ctx.lineWidth = Math.max(1.5, R * 0.1);
+                ctx.beginPath();
+                ctx.arc(lxi, ly, R, 0, Math.PI * 2);
+                ctx.stroke();
+            }
         }
     }
 
     async function rematch() {
         gameOver = false;
+        prevScore = [0, 0]; prevNumLit = -1; prevCountdownActive = true; puckNearMyGoal = false; nearMissCooldown = 0;
         rs = { puck:[TW/2,TH/2], puck_speed:0, host_paddle:[TW/2,TH-120], client_paddle:[TW/2,120],
                score:[0,0], wall_flash:0, goal_flash:0, score_flash:[0,0], hit:0, wall_hit:0, goal_scored:0, countdown:3 };
         const ch = new Channel<RS>();
         ch.onmessage = (state) => {
-            if (state.hit) { if (!muted) playHit(); navigator.vibrate?.(12); }
-            if (state.wall_hit) { if (!muted) playWall(); navigator.vibrate?.(6); }
-            if (state.goal_scored) { if (!muted) playGoal(); navigator.vibrate?.([40, 30, 40]); }
+            handleAudio(state);
             rs = state;
             if (!gameOver && (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)) {
                 gameOver = true;
@@ -372,9 +476,7 @@
         // Channel: Rust pushes RenderState here every ~16ms
         const ch = new Channel<RS>();
         ch.onmessage = (state) => {
-            if (state.hit) { if (!muted) playHit(); navigator.vibrate?.(12); }
-            if (state.wall_hit) { if (!muted) playWall(); navigator.vibrate?.(6); }
-            if (state.goal_scored) { if (!muted) playGoal(); navigator.vibrate?.([40, 30, 40]); }
+            handleAudio(state);
             rs = state;
             if (!gameOver && (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)) {
                 gameOver = true;
