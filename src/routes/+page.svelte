@@ -163,6 +163,7 @@
         class="w-full py-4 bg-purple-600 text-white rounded-2xl text-lg font-bold hover:bg-purple-500 active:scale-95 shadow-[0_0_24px_rgba(147,51,234,0.4)] transition-all uppercase tracking-widest"
         onclick={startSinglePlayer}
       >🤖 vs AI</button>
+      <p class="text-neutral-600 text-xs text-center mt-1">For best experience, use 5 GHz Wi-Fi</p>
     </div>
 
   {:else if screen === "host"}

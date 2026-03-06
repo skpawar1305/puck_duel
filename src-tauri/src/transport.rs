@@ -50,7 +50,7 @@ impl TransportState {
         self.endpoint
             .get_or_try_init(|| async {
                 Endpoint::builder()
-                    .relay_mode(RelayMode::Default)
+                    .relay_mode(RelayMode::Disabled)
                     .alpns(vec![ALPN.to_vec()])
                     .bind()
                     .await

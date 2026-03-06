@@ -120,7 +120,7 @@ struct GameState {
 
     // authority tracking
     prev_auth:           bool,
-    prev_recv_host_auth: bool, // last received isHostAuth — detect handoff transitions
+    prev_recv_host_auth: bool,
     is_host:             bool,
     is_single:           bool,
 }
@@ -138,7 +138,7 @@ impl GameState {
             wall_flash:0.0, goal_flash:0.0, score_flash:[0.0,0.0],
             hit:0, wall_hit:0, goal_scored:0, countdown: 3.0,
             prev_auth: is_single || is_host,
-            prev_recv_host_auth: true, // host starts authoritative
+            prev_recv_host_auth: true,
             is_host, is_single,
         }
     }
@@ -330,6 +330,7 @@ impl GameState {
             // auth side will send the score + reset shortly via net.
             if self.puck.y < 0.0 || self.puck.y > TH {
                 self.reset_puck();
+                self.countdown = 2.5; // prevent physics running before auth side confirms reset
                 self.target_puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
             }
 

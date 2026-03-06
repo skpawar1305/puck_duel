@@ -11,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 
 class MainActivity : TauriActivity() {
   private var multicastLock: WifiManager.MulticastLock? = null
+  private var wifiLock: WifiManager.WifiLock? = null
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
@@ -18,10 +19,29 @@ class MainActivity : TauriActivity() {
     hideSystemUI()
 
     val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
     multicastLock = wifi.createMulticastLock("puckduel_mdns").apply {
       setReferenceCounted(true)
       acquire()
     }
+
+    // Disable WiFi power saving during gameplay — prevents the 2.4GHz chip from
+    // sleeping between beacon intervals, which causes UDP packet batching and jitter.
+    val lockMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+      WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+    else
+      @Suppress("DEPRECATION") WifiManager.WIFI_MODE_FULL_HIGH_PERF
+    try { wifiLock = wifi.createWifiLock(lockMode, "puckduel_game") } catch (_: Exception) {}
+  }
+
+  override fun onResume() {
+    super.onResume()
+    try { wifiLock?.let { if (!it.isHeld) it.acquire() } } catch (_: Exception) {}
+  }
+
+  override fun onPause() {
+    try { wifiLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
+    super.onPause()
   }
 
   override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -49,6 +69,7 @@ class MainActivity : TauriActivity() {
   }
 
   override fun onDestroy() {
+    try { wifiLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
     multicastLock?.release()
     super.onDestroy()
   }
