@@ -183,12 +183,34 @@ impl GameState {
         if self.is_single {
             let ai = &mut self.client_paddle;
             let (apx, apy) = (ai.x, ai.y);
-            let aggressive = self.puck.y < TH/2.0 || self.puck.vy < -50.0;
-            let spd: f32 = if aggressive { 5.5 } else { 1.8 };
-            let tgt_y: f32 = if aggressive {
-                (self.puck.y + 50.0).max(PAR).min(TH/2.0 - PAR)
-            } else { 110.0 };
-            ai.x += (self.puck.x - ai.x) * (spd * dt).min(1.0);
+
+            // Puck is "behind" the AI paddle when it has slipped between the paddle and the AI goal (y=0)
+            let puck_behind    = self.puck.y < apy;
+            let puck_in_half   = self.puck.y < TH / 2.0;
+            let puck_approach  = self.puck.vy < -30.0;
+
+            let (spd, tgt_x, tgt_y): (f32, f32, f32) = if puck_behind {
+                // Chase the puck back — predict where it will be at interception
+                let t = if self.puck.vy < -1.0 {
+                    ((apy - self.puck.y) / (-self.puck.vy)).min(0.5)
+                } else { 0.0 };
+                let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
+                let ty = (self.puck.y - 20.0).max(PAR);
+                (9.0, pred_x, ty)
+            } else if puck_in_half || puck_approach {
+                // Puck in AI half or approaching — intercept with prediction
+                let t = if self.puck.vy.abs() > 10.0 {
+                    ((apy - self.puck.y) / self.puck.vy.abs()).clamp(0.0, 0.4)
+                } else { 0.0 };
+                let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
+                let ty = (self.puck.y + 55.0).max(PAR).min(TH / 2.0 - PAR);
+                (5.5, pred_x, ty)
+            } else {
+                // Puck in host half — return to defensive position
+                (1.8, self.puck.x, 110.0)
+            };
+
+            ai.x += (tgt_x - ai.x) * (spd * dt).min(1.0);
             ai.y += (tgt_y - ai.y) * (spd * dt * 1.3).min(1.0);
             ai.x = ai.x.max(PAR).min(TW - PAR);
             ai.y = ai.y.max(PAR).min(TH/2.0 - PAR/2.0);
