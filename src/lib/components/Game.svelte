@@ -25,7 +25,7 @@
         PAR = 27;
     const GOAL_W = 110;
     const CR = 42;
-    const MAX_SPEED = 900;
+    const MAX_SPEED = 990;
     const GX = (TW - GOAL_W) / 2;
 
     // ── Render state (populated by Rust via Channel) ──────────────────────────

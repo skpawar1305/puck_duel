@@ -28,8 +28,8 @@
     lanQrDataUrl = '';
     screen = "host";
     try {
-      const nodeAddrJson = (await invoke("get_our_node_addr")) as string;
-      lanQrDataUrl = await QRCode.toDataURL(nodeAddrJson, { width: 240, margin: 1 });
+      const localIp = (await invoke("start_addr_server")) as string;
+      lanQrDataUrl = await QRCode.toDataURL(localIp, { width: 240, margin: 1 });
       await invoke("start_accept_loop");
     } catch (e) {
       console.error(e);
@@ -46,10 +46,11 @@
     screen = "join";
   }
 
-  async function handleScan(nodeAddrJson: string) {
+  async function handleScan(peerIp: string) {
     if (connectingPeer) return;
     connectingPeer = "peer";
     try {
+      const nodeAddrJson = (await invoke("fetch_peer_addr", { peerIp })) as string;
       await invoke("connect_to_peer", { nodeAddrJson });
       // peer-connected event will fire → screen = "game"
     } catch (e: any) {

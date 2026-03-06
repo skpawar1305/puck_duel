@@ -13,7 +13,7 @@ const PAR: f32 = 27.0;
 const GOAL_W: f32 = 110.0;
 const GX: f32 = (TW - GOAL_W) / 2.0;
 const CR: f32 = 42.0;
-const MAX_SPEED: f32 = 900.0;
+const MAX_SPEED: f32 = 990.0;
 const WALL_REST: f32 = 0.88;
 const FRICTION: f32 = 0.22;
 

@@ -29,6 +29,8 @@ pub struct TransportState {
     pub msg_tx: broadcast::Sender<String>,
     /// Background task handle (accept loop / join task) — abort to cancel
     pub bg_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// LAN addr server task — serves node_addr JSON over TCP on port 9876
+    addr_server_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl TransportState {
@@ -39,6 +41,7 @@ impl TransportState {
             connection: Arc::new(Mutex::new(None)),
             msg_tx,
             bg_task: Arc::new(Mutex::new(None)),
+            addr_server_task: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -46,7 +49,8 @@ impl TransportState {
     pub async fn endpoint(&self) -> Result<&Endpoint, String> {
         self.endpoint
             .get_or_try_init(|| async {
-                Endpoint::empty_builder(RelayMode::Disabled)
+                Endpoint::builder()
+                    .relay_mode(RelayMode::Default)
                     .alpns(vec![ALPN.to_vec()])
                     .bind()
                     .await
@@ -95,6 +99,14 @@ async fn activate_connection(
     let _ = app.emit("peer-connected", ());
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+fn get_local_ip() -> Result<String, String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    socket.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
+    Ok(socket.local_addr().map_err(|e| e.to_string())?.ip().to_string())
+}
+
 // ─── Tauri commands ───────────────────────────────────────────────────────────
 
 /// Return our current EndpointAddr as a JSON string.
@@ -102,6 +114,54 @@ async fn activate_connection(
 pub async fn get_our_node_addr(transport: State<'_, TransportState>) -> Result<String, String> {
     let ep = transport.endpoint().await?;
     addr_to_json(&ep.addr())
+}
+
+/// Start a tiny TCP server on port 9876 that serves our node_addr JSON to LAN peers.
+/// Returns our local IP address to use as QR code content.
+#[tauri::command]
+pub async fn start_addr_server(transport: State<'_, TransportState>) -> Result<String, String> {
+    use tokio::net::TcpListener;
+    use tokio::io::AsyncWriteExt;
+
+    let ep = transport.endpoint().await?;
+    let node_addr_json = addr_to_json(&ep.addr())?;
+    let local_ip = get_local_ip()?;
+
+    if let Some(old) = transport.addr_server_task.lock().await.take() { old.abort(); }
+
+    let handle = tokio::spawn(async move {
+        let Ok(listener) = TcpListener::bind("0.0.0.0:9876").await else { return };
+        loop {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let json = node_addr_json.clone();
+                tokio::spawn(async move { let _ = socket.write_all(json.as_bytes()).await; });
+            }
+        }
+    });
+    *transport.addr_server_task.lock().await = Some(handle);
+
+    Ok(local_ip)
+}
+
+/// Fetch a LAN host's node_addr JSON by connecting to their addr server.
+#[tauri::command]
+pub async fn fetch_peer_addr(peer_ip: String) -> Result<String, String> {
+    use tokio::io::AsyncReadExt;
+    use tokio::net::TcpStream;
+
+    let addr = format!("{}:9876", peer_ip.trim());
+    let mut stream = tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(&addr))
+        .await
+        .map_err(|_| "Could not reach host".to_string())?
+        .map_err(|e| e.to_string())?;
+
+    let mut buf = Vec::new();
+    tokio::time::timeout(Duration::from_secs(5), stream.read_to_end(&mut buf))
+        .await
+        .map_err(|_| "Host did not respond".to_string())?
+        .map_err(|e| e.to_string())?;
+
+    String::from_utf8(buf).map_err(|e| e.to_string())
 }
 
 /// Start LAN peer discovery via mDNS-SD.
@@ -412,9 +472,8 @@ pub async fn join_online(
 /// Abort any pending background connection task (join or accept loop).
 #[tauri::command]
 pub async fn cancel_online(transport: State<'_, TransportState>) -> Result<(), String> {
-    if let Some(handle) = transport.bg_task.lock().await.take() {
-        handle.abort();
-    }
+    if let Some(handle) = transport.bg_task.lock().await.take() { handle.abort(); }
+    if let Some(handle) = transport.addr_server_task.lock().await.take() { handle.abort(); }
     Ok(())
 }
 
