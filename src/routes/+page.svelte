@@ -10,6 +10,7 @@
   let screen = $state<"menu" | "host" | "join" | "game" | "online_host" | "online_join">("menu");
   let isHost = $state(false);
   let isSinglePlayer = $state(false);
+  let useUdp = $state(false);
 
   // LAN
   let lanQrDataUrl = $state('');
@@ -25,12 +26,18 @@
   async function startHost() {
     initAudio();
     isHost = true;
+    useUdp = true;
     lanQrDataUrl = '';
     screen = "host";
     try {
-      const localIp = (await invoke("start_addr_server")) as string;
+      // grab a local address for QR code and start the UDP listen socket
+      const ips = (await invoke("get_local_ips")) as string[];
+      const localIp = ips[0] || '';
       lanQrDataUrl = await QRCode.toDataURL(localIp, { width: 240, margin: 1 });
-      await invoke("start_accept_loop");
+      await invoke("start_udp_host");
+      // kick off discovery so joiner can find us without QR
+      invoke("start_discovery").catch(() => {});
+      screen = "game";
     } catch (e) {
       console.error(e);
       alert("Failed to start host: " + e);
@@ -42,17 +49,19 @@
   async function startJoin() {
     initAudio();
     isHost = false;
+    useUdp = true;
     connectingPeer = null;
     screen = "join";
+    invoke("start_discovery").catch(() => {});
   }
 
   async function handleScan(peerIp: string) {
     if (connectingPeer) return;
     connectingPeer = "peer";
     try {
-      const nodeAddrJson = (await invoke("fetch_peer_addr", { peerIp })) as string;
-      await invoke("connect_to_peer", { nodeAddrJson });
-      // peer-connected event will fire → screen = "game"
+      // direct UDP connect; port 8080 is assumed
+      await invoke("connect_udp_client", { hostIp: peerIp });
+      screen = "game";
     } catch (e: any) {
       connectingPeer = null;
       alert("Failed to connect: " + e);
@@ -71,9 +80,11 @@
   async function startOnlineHost() {
     initAudio();
     isHost = true;
+    useUdp = false;
     onlineError = "";
     onlineConnecting = true;
     screen = "online_host";
+    invoke("stop_discovery").catch(() => {});
     try {
       roomCode = (await invoke("host_online")) as string;
     } catch (e: any) {
@@ -91,6 +102,7 @@
     onlineError = "";
     joinCode = "";
     screen = "online_join";
+    invoke("stop_discovery").catch(() => {});
   }
 
   async function joinOnlineRoom() {
@@ -109,6 +121,7 @@
   // ── Event listeners ────────────────────────────────────────────────────
   let unlistenPeerConnected: UnlistenFn | null = null;
   let unlistenJoinError: UnlistenFn | null = null;
+  let unlistenPeerFound: UnlistenFn | null = null;
 
   onMount(async () => {
     unlistenPeerConnected = await listen("peer-connected", () => {
@@ -121,11 +134,24 @@
       onlineError = event.payload;
       onlineConnecting = false;
     });
+
+    unlistenPeerFound = await listen<string>("peer-found", (event) => {
+      const ip = event.payload;
+      // auto-join if we're on the LAN join screen
+      if (screen === "join" && !connectingPeer) {
+        handleScan(ip);
+      }
+    });
+
+    // always run discovery so peers see us
+    invoke("start_discovery").catch(() => {});
   });
 
   onDestroy(() => {
     if (unlistenPeerConnected) unlistenPeerConnected();
     if (unlistenJoinError) unlistenJoinError();
+    if (unlistenPeerFound) unlistenPeerFound();
+    invoke("stop_discovery").catch(() => {});
   });
 </script>
 
@@ -252,9 +278,10 @@
 
   {:else if screen === "game"}
     <div class="absolute inset-0 w-full h-full">
-      <Game {isHost} {isSinglePlayer} onBack={() => {
+      <Game {isHost} {isSinglePlayer} {useUdp} onBack={() => {
         screen = "menu";
         isSinglePlayer = false;
+        useUdp = false;
       }} />
     </div>
   {/if}

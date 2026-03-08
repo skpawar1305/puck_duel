@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::State;
 use crate::transport::TransportState;
+use std::net::SocketAddr;
 
 
 const TW: f32 = 360.0;
@@ -494,9 +495,11 @@ impl GameState {
 pub async fn start_game(
     engine:           State<'_, GameEngine>,
     transport:        State<'_, TransportState>,
+    udp:              State<'_, crate::udp_transport::UdpState>,
     is_host:          bool,
     is_single_player: bool,
     channel:          Channel<RenderState>,
+    use_udp:          bool,
 ) -> Result<(), String> {
     if engine.running.swap(true, Ordering::SeqCst) {
         return Ok(()); // already running
@@ -513,8 +516,16 @@ pub async fn start_game(
     // iroh connection handle (clone the Arc, not the option)
     let connection = transport.connection.clone();
 
-    // Subscribe to the broadcast channel fed by the recv loop in transport.rs
-    let mut net_rx = transport.msg_tx.subscribe();
+    // clone pieces of the UDP state so we can move them into the async task
+    let udp_socket = udp.socket.clone();
+    let udp_peer = udp.peer.clone();
+
+    // choose which broadcast channel to subscribe to
+    let mut net_rx = if use_udp {
+        udp.msg_tx.subscribe()
+    } else {
+        transport.msg_tx.subscribe()
+    };
 
     tokio::spawn(async move {
         let mut gs       = GameState::new(is_host, is_single_player);
@@ -548,8 +559,18 @@ pub async fn start_game(
             // cross the midline on a non-send frame, dropping authority without
             // ever notifying the peer, leaving both sides non-authoritative.
             if let Some(msg) = gs.net_msg() {
-                if let Some(ref conn) = *connection.lock().await {
-                    let _ = conn.send_datagram(bytes::Bytes::from(msg.into_bytes()));
+                if use_udp {
+                    // send over raw UDP using cloned handles
+                    let peer_opt: Option<SocketAddr> = { udp_peer.lock().await.clone() };
+                    if let Some(peer) = peer_opt {
+                        if let Some(sock) = &*udp_socket.lock().await {
+                            let _ = sock.send_to(msg.as_bytes(), peer).await;
+                        }
+                    }
+                } else {
+                    if let Some(ref conn) = *connection.lock().await {
+                        let _ = conn.send_datagram(bytes::Bytes::from(msg.into_bytes()));
+                    }
                 }
             }
 

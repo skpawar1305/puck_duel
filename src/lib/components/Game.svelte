@@ -9,10 +9,12 @@
     let {
         isHost,
         isSinglePlayer = false,
+        useUdp = false,
         onBack,
     } = $props<{
         isHost: boolean;
         isSinglePlayer?: boolean;
+        useUdp?: boolean;
         onBack?: () => void;
     }>();
 
@@ -426,7 +428,7 @@
                 invoke("stop_game").catch(() => {});
             }
         };
-        await invoke("start_game", { isHost, isSinglePlayer, channel: ch });
+        await invoke("start_game", { isHost, isSinglePlayer, channel: ch, use_udp: useUdp });
     }
 
     // ── Input → Rust ──────────────────────────────────────────────────────────
@@ -487,7 +489,7 @@
         };
 
         // Start Rust game engine
-        await invoke("start_game", { isHost, isSinglePlayer, channel: ch });
+        await invoke("start_game", { isHost, isSinglePlayer, channel: ch, use_udp: useUdp });
 
         rafId = requestAnimationFrame(draw);
     });
