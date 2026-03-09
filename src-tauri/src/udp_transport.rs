@@ -19,6 +19,8 @@ pub struct UdpState {
     pub msg_tx: tokio::sync::broadcast::Sender<String>,
     /// background task handle for discovery; abort to restart
     pub discovery_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// background task handle for the main recv loop; abort before rebinding
+    pub recv_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl UdpState {
@@ -29,12 +31,13 @@ impl UdpState {
             peer: Arc::new(Mutex::new(None)),
             msg_tx,
             discovery_task: Arc::new(Mutex::new(None)),
+            recv_task: Arc::new(Mutex::new(None)),
         }
     }
 }
 
 /// Spawn a background task that reads datagrams and forwards them to the GUI.
-fn spawn_recv_loop(socket: Arc<UdpSocket>, peer: Arc<Mutex<Option<SocketAddr>>>, app: AppHandle, msg_tx: tokio::sync::broadcast::Sender<String>) {
+fn spawn_recv_loop(socket: Arc<UdpSocket>, peer: Arc<Mutex<Option<SocketAddr>>>, app: AppHandle, msg_tx: tokio::sync::broadcast::Sender<String>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = [0u8; 1500];
         loop {
@@ -56,19 +59,30 @@ fn spawn_recv_loop(socket: Arc<UdpSocket>, peer: Arc<Mutex<Option<SocketAddr>>>,
                 }
             }
         }
-    });
+    })
+}
+
+/// Abort the recv loop and drop the existing socket so port 8080 is freed.
+async fn close_existing_socket(state: &UdpState) {
+    if let Some(task) = state.recv_task.lock().await.take() {
+        task.abort();
+    }
+    *state.socket.lock().await = None;
+    *state.peer.lock().await = None;
 }
 
 /// Bind a socket on port **8080** and start listening for a single peer.
 #[tauri::command]
 pub async fn start_udp_host(state: State<'_, UdpState>, app: AppHandle) -> Result<(), String> {
+    close_existing_socket(&state).await;
     let sock = UdpSocket::bind("0.0.0.0:8080").await.map_err(|e| e.to_string())?;
     let sock_arc = Arc::new(sock);
     {
         let mut guard = state.socket.lock().await;
         *guard = Some(sock_arc.clone());
     }
-    spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone());
+    let handle = spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone());
+    *state.recv_task.lock().await = Some(handle);
     Ok(())
 }
 
@@ -80,6 +94,7 @@ pub async fn connect_udp_client(
     app: AppHandle,
     host_ip: String,
 ) -> Result<(), String> {
+    close_existing_socket(&state).await;
     let sock = UdpSocket::bind("0.0.0.0:0").await.map_err(|e| e.to_string())?;
     let host_addr: SocketAddr = if host_ip.contains(':') {
         host_ip.parse().map_err(|e: std::net::AddrParseError| e.to_string())?
@@ -93,7 +108,8 @@ pub async fn connect_udp_client(
         let mut sock_guard = state.socket.lock().await;
         *sock_guard = Some(sock_arc.clone());
     }
-    spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone());
+    let handle = spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone());
+    *state.recv_task.lock().await = Some(handle);
     Ok(())
 }
 
