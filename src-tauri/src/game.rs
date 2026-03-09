@@ -150,13 +150,12 @@ impl GameState {
 
     fn auth(&self) -> bool {
         if self.is_single { return true; }
-        // Use target_puck.y (network-ground-truth): ensures exactly ONE side is
-        // authoritative at all times. On auth frames we echo target_puck = puck,
-        // so this is always fresh. On non-auth frames it reflects the peer's last
-        // sent position — the definitive record of which half the puck is in.
-        let y = self.target_puck.y;
-        if self.is_host { y >= TH / 2.0 }
-        else            { y <  TH / 2.0 }
+        // Client is always authoritative in multiplayer.
+        // Split-authority (each side owns their half) caused double-scoring:
+        // after any goal the puck resets to y=TH/2 exactly, which resolves to
+        // host-auth (>= TH/2), so BOTH sides could be running auth physics near
+        // a goal line at the same time. Client-always-auth eliminates that race.
+        !self.is_host
     }
 
     fn reset_puck(&mut self) {
