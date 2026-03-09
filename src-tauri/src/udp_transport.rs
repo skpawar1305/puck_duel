@@ -37,9 +37,20 @@ impl UdpState {
 }
 
 /// Spawn a background task that reads datagrams and forwards them to the GUI.
-fn spawn_recv_loop(socket: Arc<UdpSocket>, peer: Arc<Mutex<Option<SocketAddr>>>, app: AppHandle, msg_tx: tokio::sync::broadcast::Sender<String>) -> tokio::task::JoinHandle<()> {
+///
+/// When `notify_peer_connected` is true (host mode), emits a `peer-connected`
+/// Tauri event the first time a datagram arrives so the frontend can transition
+/// from the QR-code waiting screen to the game screen.
+fn spawn_recv_loop(
+    socket: Arc<UdpSocket>,
+    peer: Arc<Mutex<Option<SocketAddr>>>,
+    app: AppHandle,
+    msg_tx: tokio::sync::broadcast::Sender<String>,
+    notify_peer_connected: bool,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = [0u8; 1500];
+        let mut peer_notified = false;
         loop {
             match socket.recv_from(&mut buf).await {
                 Ok((len, addr)) => {
@@ -47,6 +58,11 @@ fn spawn_recv_loop(socket: Arc<UdpSocket>, peer: Arc<Mutex<Option<SocketAddr>>>,
                     {
                         let mut guard = peer.lock().await;
                         *guard = Some(addr);
+                    }
+                    // first packet from a peer → notify the frontend
+                    if notify_peer_connected && !peer_notified {
+                        peer_notified = true;
+                        let _ = app.emit("peer-connected", ());
                     }
                     if let Ok(msg) = String::from_utf8(buf[..len].to_vec()) {
                         let _ = app.emit("udp-msg-received", (addr.to_string(), msg.clone()));
@@ -81,7 +97,7 @@ pub async fn start_udp_host(state: State<'_, UdpState>, app: AppHandle) -> Resul
         let mut guard = state.socket.lock().await;
         *guard = Some(sock_arc.clone());
     }
-    let handle = spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone());
+    let handle = spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone(), true);
     *state.recv_task.lock().await = Some(handle);
     Ok(())
 }
@@ -108,7 +124,7 @@ pub async fn connect_udp_client(
         let mut sock_guard = state.socket.lock().await;
         *sock_guard = Some(sock_arc.clone());
     }
-    let handle = spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone());
+    let handle = spawn_recv_loop(sock_arc.clone(), state.peer.clone(), app, state.msg_tx.clone(), false);
     *state.recv_task.lock().await = Some(handle);
     Ok(())
 }
