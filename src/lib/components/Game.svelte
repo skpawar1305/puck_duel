@@ -488,8 +488,18 @@
             }
         };
 
+        // Ensure any lingering game loop from a previous session is stopped
+        // before starting a new one (running flag could be stuck true).
+        await invoke("stop_game").catch(() => {});
+
         // Start Rust game engine
-        await invoke("start_game", { isHost, isSinglePlayer, channel: ch, use_udp: useUdp });
+        try {
+            await invoke("start_game", { isHost, isSinglePlayer, channel: ch, use_udp: useUdp });
+        } catch (e) {
+            console.error("start_game failed:", e);
+            onBack?.();
+            return;
+        }
 
         rafId = requestAnimationFrame(draw);
     });
