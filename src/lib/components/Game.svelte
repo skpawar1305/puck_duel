@@ -428,7 +428,7 @@
                 invoke("stop_game").catch(() => {});
             }
         };
-        await invoke("start_game", { isHost, isSinglePlayer, channel: ch, use_udp: useUdp });
+        await invoke("start_game", { isHost, isSinglePlayer, channel: ch, useUdp });
     }
 
     // ── Input → Rust ──────────────────────────────────────────────────────────
@@ -494,7 +494,7 @@
 
         // Start Rust game engine
         try {
-            await invoke("start_game", { isHost, isSinglePlayer, channel: ch, use_udp: useUdp });
+            await invoke("start_game", { isHost, isSinglePlayer, channel: ch, useUdp });
         } catch (e) {
             console.error("start_game failed:", e);
             onBack?.();

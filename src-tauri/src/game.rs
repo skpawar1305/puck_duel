@@ -23,6 +23,9 @@ pub struct GameEngine {
     pub running: Arc<AtomicBool>,
     pub paused:  Arc<AtomicBool>,
     pub pointer: Arc<Mutex<[f32; 2]>>,
+    /// Handle to the active game loop task so it can be forcibly aborted.
+    /// Uses std::sync::Mutex so stop_game can stay a sync command.
+    pub task:    Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 impl GameEngine {
     pub fn new() -> Self {
@@ -30,6 +33,7 @@ impl GameEngine {
             running: Arc::new(AtomicBool::new(false)),
             paused:  Arc::new(AtomicBool::new(false)),
             pointer: Arc::new(Mutex::new([TW / 2.0, TH - 120.0])),
+            task:    Mutex::new(None),
         }
     }
 }
@@ -501,12 +505,19 @@ pub async fn start_game(
     channel:          Channel<RenderState>,
     use_udp:          bool,
 ) -> Result<(), String> {
-    if engine.running.swap(true, Ordering::SeqCst) {
-        return Ok(()); // already running
+    // Abort any existing game task before starting a new one.
+    // abort() is sufficient — an aborted task is cancelled at its next .await
+    // point and never reaches the final running.store(false), eliminating the
+    // race condition where the old task's cleanup killed the new game.
+    {
+        let old = engine.task.lock().unwrap().take();
+        if let Some(h) = old { h.abort(); }
     }
 
-    // Reset pointer to starting position
+    engine.running.store(false, Ordering::SeqCst);
+    engine.paused.store(false, Ordering::SeqCst);
     *engine.pointer.lock().unwrap() = if is_host { [TW/2.0, TH-120.0] } else { [TW/2.0, 120.0] };
+    engine.running.store(true, Ordering::SeqCst);
 
     // Cloneable handles passed into the async task
     let running  = engine.running.clone();
@@ -527,7 +538,7 @@ pub async fn start_game(
         transport.msg_tx.subscribe()
     };
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         let mut gs       = GameState::new(is_host, is_single_player);
         let mut interval = tokio::time::interval(Duration::from_nanos(16_666_667));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -545,7 +556,7 @@ pub async fn start_game(
                 match net_rx.try_recv() {
                     Ok(msg)                                => { gs.apply_net(&msg); }
                     Err(tokio::sync::broadcast::error::TryRecvError::Empty)   => break,
-                    Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => break, // stale, skip
+                    Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => break,
                     Err(_) => break,
                 }
             }
@@ -554,13 +565,8 @@ pub async fn start_game(
             let ptr = *pointer.lock().unwrap();
             gs.update(dt, ptr);
 
-            // Send every frame — ~14KB/s total, trivial for LAN and QUIC.
-            // Throttling to 30Hz was causing authority deadlocks: the echo could
-            // cross the midline on a non-send frame, dropping authority without
-            // ever notifying the peer, leaving both sides non-authoritative.
             if let Some(msg) = gs.net_msg() {
                 if use_udp {
-                    // send over raw UDP using cloned handles
                     let peer_opt: Option<SocketAddr> = { udp_peer.lock().await.clone() };
                     if let Some(peer) = peer_opt {
                         if let Some(sock) = &*udp_socket.lock().await {
@@ -574,7 +580,7 @@ pub async fn start_game(
                 }
             }
 
-            // Push render state to JS — this is the only remaining IPC
+            // Push render state to JS
             if channel.send(gs.to_render()).is_err() {
                 break; // JS closed the channel (navigated away)
             }
@@ -583,11 +589,16 @@ pub async fn start_game(
         running.store(false, Ordering::Relaxed);
     });
 
+    *engine.task.lock().unwrap() = Some(handle);
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn stop_game(engine: State<'_, GameEngine>) {
+    if let Some(h) = engine.task.lock().unwrap().take() {
+        h.abort();
+    }
     engine.paused.store(false, Ordering::Relaxed);
     engine.running.store(false, Ordering::Relaxed);
 }

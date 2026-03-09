@@ -14,6 +14,7 @@
 
   // LAN
   let lanQrDataUrl = $state('');
+  let lanError = $state('');
   let connectingPeer = $state<string | null>(null);
 
   // Online state
@@ -28,6 +29,7 @@
     isHost = true;
     useUdp = true;
     lanQrDataUrl = '';
+    lanError = '';
     screen = "host";
     try {
       // grab a local address for QR code and start the UDP listen socket
@@ -37,11 +39,10 @@
       await invoke("start_udp_host");
       // kick off discovery so joiner can find us without QR
       invoke("start_discovery").catch(() => {});
-      screen = "game";
+      // Stay on host screen — peer-connected event fires when client joins
     } catch (e) {
       console.error(e);
-      alert("Failed to start host: " + e);
-      screen = "menu";
+      lanError = "Failed to start host: " + e;
     }
   }
 
@@ -73,6 +74,7 @@
     initAudio();
     isHost = true;
     isSinglePlayer = true;
+    useUdp = false;
     screen = "game";
   }
 
@@ -195,7 +197,13 @@
   {:else if screen === "host"}
     <div class="flex flex-col gap-5 items-center text-center p-8 w-full max-w-sm">
       <h2 class="text-2xl font-black text-cyan-400">Host (Local)</h2>
-      {#if lanQrDataUrl}
+      {#if lanError}
+        <div class="text-red-400 text-sm px-2">{lanError}</div>
+        <button
+          class="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500"
+          onclick={startHost}
+        >Retry</button>
+      {:else if lanQrDataUrl}
         <p class="text-neutral-400 text-sm">Ask your friend to scan this QR code</p>
         <img src={lanQrDataUrl} alt="QR code" class="rounded-2xl w-48 h-48" />
         <p class="text-neutral-500 text-xs animate-pulse">Waiting for opponent…</p>
@@ -205,7 +213,7 @@
       {/if}
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-2"
-        onclick={async () => { await invoke('cancel_online').catch(() => {}); screen = "menu"; }}
+        onclick={async () => { await invoke('cancel_online').catch(() => {}); useUdp = false; isHost = false; screen = "menu"; }}
       >Cancel</button>
     </div>
 
