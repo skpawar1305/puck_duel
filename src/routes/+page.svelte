@@ -6,6 +6,7 @@
   import { initAudio } from "$lib/audio";
   import QRCode from 'qrcode';
   import QRScanner from '$lib/components/QRScanner.svelte';
+  import { cleanupExpiredRooms, createRoom, deleteRoom, findRoomByCode, generateRoomCode } from "$lib/pocketbase";
 
   let screen = $state<"menu" | "host" | "join" | "game" | "online_host" | "online_join">("menu");
   let isHost = $state(false);
@@ -22,6 +23,32 @@
   let joinCode = $state("");
   let onlineConnecting = $state(false);
   let onlineError = $state("");
+  let hostedRoomId = $state<string | null>(null);
+
+  async function createRoomWithRetry(nodeAddrJson: string): Promise<{ code: string; roomId: string }> {
+    let lastError: unknown = null;
+    for (let i = 0; i < 8; i++) {
+      const code = generateRoomCode();
+      try {
+        const roomId = await createRoom(code, nodeAddrJson);
+        return { code, roomId };
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError ?? new Error("Failed to create room");
+  }
+
+  async function cancelOnlineSession() {
+    const roomId = hostedRoomId;
+    hostedRoomId = null;
+    roomCode = "";
+    onlineConnecting = false;
+    if (roomId) {
+      await deleteRoom(roomId).catch(() => {});
+    }
+    await invoke("cancel_online").catch(() => {});
+  }
 
   // ── LAN Host ─────────────────────────────────────────────────────────
   async function startHost() {
@@ -82,15 +109,23 @@
   async function startOnlineHost() {
     initAudio();
     isHost = true;
+    isSinglePlayer = false;
     useUdp = false;
     onlineError = "";
     onlineConnecting = true;
+    hostedRoomId = null;
     screen = "online_host";
     invoke("stop_discovery").catch(() => {});
     try {
-      roomCode = (await invoke("host_online")) as string;
+      await invoke("start_accept_loop");
+      const nodeAddrJson = (await invoke("get_our_node_addr")) as string;
+      await cleanupExpiredRooms().catch(() => {});
+      const created = await createRoomWithRetry(nodeAddrJson);
+      roomCode = created.code;
+      hostedRoomId = created.roomId;
     } catch (e: any) {
       onlineError = e?.toString() ?? "Failed to connect";
+      await cancelOnlineSession();
     } finally {
       onlineConnecting = false;
     }
@@ -112,8 +147,13 @@
     onlineConnecting = true;
     onlineError = "";
     try {
-      await invoke("join_online", { roomCode: joinCode.trim() });
-      // peer-connected event fires → screen = "game"
+      const room = await findRoomByCode(joinCode.trim());
+      if (!room) {
+        throw new Error(`Room '${joinCode.trim()}' not found`);
+      }
+      await invoke("connect_to_peer", { nodeAddrJson: room.node_addr });
+      await deleteRoom(room.id).catch(() => {});
+      // peer-connected event fires from connect_to_peer → screen = "game"
     } catch (e: any) {
       onlineError = e?.toString() ?? "Failed to join";
       onlineConnecting = false;
@@ -122,19 +162,18 @@
 
   // ── Event listeners ────────────────────────────────────────────────────
   let unlistenPeerConnected: UnlistenFn | null = null;
-  let unlistenJoinError: UnlistenFn | null = null;
   let unlistenPeerFound: UnlistenFn | null = null;
 
   onMount(async () => {
     unlistenPeerConnected = await listen("peer-connected", () => {
       connectingPeer = null;
       onlineConnecting = false;
+      if (hostedRoomId) {
+        const roomId = hostedRoomId;
+        hostedRoomId = null;
+        deleteRoom(roomId).catch(() => {});
+      }
       flushSync(() => { screen = "game"; });
-    });
-
-    unlistenJoinError = await listen<string>("join-error", (event) => {
-      onlineError = event.payload;
-      onlineConnecting = false;
     });
 
     unlistenPeerFound = await listen<string>("peer-found", (event) => {
@@ -151,9 +190,9 @@
 
   onDestroy(() => {
     if (unlistenPeerConnected) unlistenPeerConnected();
-    if (unlistenJoinError) unlistenJoinError();
     if (unlistenPeerFound) unlistenPeerFound();
     invoke("stop_discovery").catch(() => {});
+    cancelOnlineSession().catch(() => {});
   });
 </script>
 
@@ -213,7 +252,7 @@
       {/if}
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-2"
-        onclick={async () => { await invoke('cancel_online').catch(() => {}); useUdp = false; isHost = false; screen = "menu"; }}
+        onclick={async () => { await cancelOnlineSession(); useUdp = false; isHost = false; screen = "menu"; }}
       >Cancel</button>
     </div>
 
@@ -250,7 +289,7 @@
       {/if}
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600 mt-2"
-        onclick={() => (screen = "menu")}
+        onclick={async () => { await cancelOnlineSession(); screen = "menu"; }}
       >Cancel</button>
     </div>
 
@@ -280,7 +319,7 @@
       >{onlineConnecting ? "Connecting…" : "Join"}</button>
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"
-        onclick={() => (screen = "menu")}
+        onclick={async () => { await cancelOnlineSession(); screen = "menu"; }}
       >Cancel</button>
     </div>
 

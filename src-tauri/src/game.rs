@@ -14,6 +14,7 @@ const PAR: f32 = 27.0;
 const GOAL_W: f32 = 110.0;
 const GX: f32 = (TW - GOAL_W) / 2.0;
 const CR: f32 = 42.0;
+const AUTH_HYSTERESIS: f32 = 12.0;
 const MAX_SPEED: f32 = 990.0;
 const WALL_REST: f32 = 0.88;
 const FRICTION: f32 = 0.22;
@@ -148,14 +149,29 @@ impl GameState {
         }
     }
 
+    fn host_is_authoritative(&self) -> bool {
+        if self.is_single { return true; }
+
+        let mid = TH / 2.0;
+        let prev_host_auth = if self.is_host { self.prev_auth } else { !self.prev_auth };
+
+        if self.puck.y > mid + AUTH_HYSTERESIS {
+            true
+        } else if self.puck.y < mid - AUTH_HYSTERESIS {
+            false
+        } else {
+            prev_host_auth
+        }
+    }
+
     fn auth(&self) -> bool {
         if self.is_single { return true; }
-        // Client is always authoritative in multiplayer.
-        // Split-authority (each side owns their half) caused double-scoring:
-        // after any goal the puck resets to y=TH/2 exactly, which resolves to
-        // host-auth (>= TH/2), so BOTH sides could be running auth physics near
-        // a goal line at the same time. Client-always-auth eliminates that race.
-        !self.is_host
+
+        // Multiplayer uses split authority: the side containing the puck owns
+        // puck simulation and scoring. Inside the center handoff band we keep
+        // the previous owner, which makes the tie-break deterministic on both
+        // peers and prevents rapid authority flapping near midfield.
+        self.host_is_authoritative() == self.is_host
     }
 
     fn reset_puck(&mut self) {
@@ -233,10 +249,8 @@ impl GameState {
         let auth_now = self.auth();
 
         if auth_now && self.countdown == 0.0 {
-            // Just gained authority — snap to peer's last known position so our local puck.y
-            // is on the correct side of the midline. Without this snap, the dead-reckoned
-            // puck.y might be on the wrong side, the echo would flip target_puck wrong,
-            // and auth() would immediately drop authority on the very next frame.
+            // Just gained authority — snap to peer's last known puck state so
+            // both peers hand off from the same crossing point and velocity.
             if !self.prev_auth {
                 self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
                 self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
@@ -300,13 +314,13 @@ impl GameState {
             let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
             if cs > MAX_SPEED { self.puck.vx=self.puck.vx/cs*MAX_SPEED; self.puck.vy=self.puck.vy/cs*MAX_SPEED; }
 
-            // Echo authoritative puck into target_puck so auth() stays stable next frame
-            // (prevents stale target_puck from causing false authority loss after a goal reset)
+            // Echo authoritative puck into target_puck so the next ownership
+            // decision uses the freshest crossing/reset state.
             self.target_puck = self.puck.clone();
 
         } else if auth_now {
-            // Auth but in countdown: puck already at center from reset_puck(), hold it there.
-            // Echo so auth() sees center next frame and doesn't incorrectly drop authority.
+            // Auth but in countdown: puck already sits at center from reset_puck().
+            // Echo it so the sticky handoff band keeps both peers aligned.
             self.target_puck = self.puck.clone();
 
         } else if self.countdown > 0.0 {
@@ -447,15 +461,19 @@ impl GameState {
                 self.score[0] = self.score[0].max(s[0]);
                 self.score[1] = self.score[1].max(s[1]);
             }
-            // Accept puck+countdown from client when: client is auth (!is_host_auth) OR authority just changed
+            // Accept puck+countdown from client when: client is auth (!is_host_auth)
+            // OR authority just changed. Ignore stale-round puck packets so an
+            // old pre-goal state cannot pull us away from center after scoring.
             if !is_host_auth || auth_changed {
-                if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                    self.target_puck = Puck {
-                        x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                        y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                        vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                        vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                    };
+                if fresh_round {
+                    if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
+                        self.target_puck = Puck {
+                            x:  p[0].as_f64().unwrap_or(0.0) as f32,
+                            y:  p[1].as_f64().unwrap_or(0.0) as f32,
+                            vx: vel[0].as_f64().unwrap_or(0.0) as f32,
+                            vy: vel[1].as_f64().unwrap_or(0.0) as f32,
+                        };
+                    }
                 }
                 // Sync countdown from auth freely, but reject stale pre-goal packets
                 // (those have recv_sum < local_sum and would carry countdown=0 after a goal).
@@ -473,15 +491,19 @@ impl GameState {
                 self.score[0] = self.score[0].max(s[0]);
                 self.score[1] = self.score[1].max(s[1]);
             }
-            // Accept puck+countdown from host when: host is auth (is_host_auth) OR authority just changed
+            // Accept puck+countdown from host when: host is auth (is_host_auth)
+            // OR authority just changed. Ignore stale-round puck packets so an
+            // old pre-goal state cannot pull us away from center after scoring.
             if is_host_auth || auth_changed {
-                if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                    self.target_puck = Puck {
-                        x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                        y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                        vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                        vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                    };
+                if fresh_round {
+                    if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
+                        self.target_puck = Puck {
+                            x:  p[0].as_f64().unwrap_or(0.0) as f32,
+                            y:  p[1].as_f64().unwrap_or(0.0) as f32,
+                            vx: vel[0].as_f64().unwrap_or(0.0) as f32,
+                            vy: vel[1].as_f64().unwrap_or(0.0) as f32,
+                        };
+                    }
                 }
                 // Sync countdown from auth freely, but reject stale pre-goal packets
                 if fresh_round {
