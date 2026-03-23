@@ -7,7 +7,7 @@ A fast-paced **P2P air hockey** game for Android — play on the same Wi-Fi or o
 ## Features
 
 - **LAN multiplayer** — zero-config pairing on the same Wi-Fi via mDNS auto-discovery
-- **Online multiplayer** — play over the internet using a 6-character room code (no relay server — pure P2P QUIC)
+- **Online multiplayer** — play over the internet using a 4-digit room code (no relay server — pure P2P QUIC)
 - **Single player** — practice against an AI opponent
 - **60 Hz Rust physics engine** — all game logic runs in a native Rust tokio loop
 - **Split authority** — fair puck ownership on both sides of the table, no host advantage
@@ -28,7 +28,7 @@ A fast-paced **P2P air hockey** game for Android — play on the same Wi-Fi or o
 | JS↔Rust IPC | Tauri Channel API (streaming) + `invoke` |
 | P2P transport | [iroh](https://github.com/n0-computer/iroh) 0.96 — QUIC, `RelayMode::Disabled` |
 | LAN discovery | mDNS-SD (`mdns-sd` crate) |
-| Online signaling | Supabase (REST, room code exchange only) |
+| Online signaling | PocketBase (REST, room code exchange only) |
 
 ## Architecture
 
@@ -40,7 +40,7 @@ Connections are pure peer-to-peer QUIC via **iroh** with relay servers completel
 
 **LAN pairing**: both sides call `discover_lan`, which registers an mDNS-SD service and browses simultaneously. The join side sees a live list of discovered hosts and taps to connect.
 
-**Online pairing**: the host calls `host_online`, which posts its iroh `EndpointAddr` (serialized JSON) to a Supabase table keyed by a random 6-char room code. The guest enters the code, fetches the `EndpointAddr`, and dials directly.
+**Online pairing**: the host calls `host_online`, which posts its iroh `EndpointAddr` (serialized JSON) to a PocketBase `rooms` collection keyed by a random 4-digit room code. The guest enters the code, fetches the `EndpointAddr`, and dials directly.
 
 **Split-authority model**: the player whose half of the table the puck is in owns physics authority. Both players flip authority simultaneously by keying off the peer's last reported puck position, eliminating race conditions at the midline.
 
@@ -53,23 +53,23 @@ Connections are pure peer-to-peer QUIC via **iroh** with relay servers completel
 - [Android SDK + NDK](https://tauri.app/v2/guides/building/android/)
 - Tauri CLI: `cargo install tauri-cli`
 
-### Supabase setup (online multiplayer only)
+### PocketBase setup (online multiplayer only)
 
-1. Create a free project at [supabase.com](https://supabase.com).
-2. Run in the SQL editor:
-   ```sql
-   create table rooms (
-     code text primary key,
-     node_addr text not null,
-     created_at timestamptz default now()
-   );
-   alter table rooms enable row level security;
-   create policy "public read/write" on rooms for all using (true) with check (true);
-   ```
-3. Copy the example env file and fill in your credentials:
+1. Open your PocketBase admin at `https://puckduel.dano.win/_/`.
+2. Create a collection named `rooms` with these fields:
+   - `code` (text, required)
+   - `node_addr` (text, required)
+   - `expires_at` (number, required)
+3. Add a unique index on `code`.
+4. Set collection API rules for this game flow:
+   - `ListRule`: allow
+   - `ViewRule`: allow
+   - `CreateRule`: allow
+   - `DeleteRule`: allow
+5. Copy the example env file and fill in your server values:
    ```bash
    cp src-tauri/.env.example src-tauri/.env
-   # then edit src-tauri/.env with your Project URL and anon key
+   # then edit src-tauri/.env with your PocketBase URL and optional token
    ```
    `src-tauri/.env` is gitignored and never committed.
 

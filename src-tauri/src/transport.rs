@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::time::Duration;
 use bytes::Bytes;
 use iroh::{Endpoint, EndpointAddr, endpoint::RelayMode};
@@ -14,10 +15,14 @@ pub const ALPN: &[u8] = b"puck-duel/0";
 /// mDNS service type for LAN discovery
 const MDNS_SERVICE_TYPE: &str = "_puckduel._udp.local.";
 
-/// Supabase credentials — set in src-tauri/.env (never committed)
-/// See src-tauri/.env.example for the required keys.
-const SUPABASE_URL: &str = env!("SUPABASE_URL", "Set SUPABASE_URL in src-tauri/.env");
-const SUPABASE_ANON_KEY: &str = env!("SUPABASE_ANON_KEY", "Set SUPABASE_ANON_KEY in src-tauri/.env");
+/// Room records older than this are treated as stale.
+const ROOM_TTL_SECS: i64 = 5 * 60;
+
+/// Join attempts poll the signaling backend for this long before timing out.
+const JOIN_TIMEOUT_SECS: u64 = 30;
+
+/// Poll interval for room discovery.
+const JOIN_POLL_INTERVAL_SECS: u64 = 1;
 
 /// Managed state for the iroh transport layer.
 pub struct TransportState {
@@ -31,6 +36,8 @@ pub struct TransportState {
     pub bg_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// LAN addr server task — serves node_addr JSON over TCP on port 9876
     addr_server_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// PocketBase room record id for the current hosted online room.
+    hosted_room_id: Arc<Mutex<Option<String>>>,
 }
 
 impl TransportState {
@@ -42,6 +49,7 @@ impl TransportState {
             msg_tx,
             bg_task: Arc::new(Mutex::new(None)),
             addr_server_task: Arc::new(Mutex::new(None)),
+            hosted_room_id: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -105,6 +113,133 @@ fn get_local_ip() -> Result<String, String> {
     let socket = std::net::UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
     socket.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
     Ok(socket.local_addr().map_err(|e| e.to_string())?.ip().to_string())
+}
+
+fn unix_now_secs() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn pocketbase_url() -> Result<String, String> {
+    let raw = std::env::var("POCKETBASE_URL")
+        .ok()
+        .or_else(|| option_env!("POCKETBASE_URL").map(str::to_string))
+        .ok_or_else(|| "Set POCKETBASE_URL in src-tauri/.env".to_string())?;
+    let trimmed = raw.trim().trim_end_matches('/').to_string();
+    if trimmed.is_empty() {
+        return Err("POCKETBASE_URL cannot be empty".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn pocketbase_api_base() -> Result<String, String> {
+    let base = pocketbase_url()?;
+    if base.ends_with("/api") {
+        Ok(base)
+    } else {
+        Ok(format!("{base}/api"))
+    }
+}
+
+fn pocketbase_token() -> Option<String> {
+    std::env::var("POCKETBASE_TOKEN")
+        .ok()
+        .or_else(|| option_env!("POCKETBASE_TOKEN").map(str::to_string))
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn with_pocketbase_auth(
+    request: reqwest::RequestBuilder,
+    token: Option<&str>,
+) -> reqwest::RequestBuilder {
+    if let Some(t) = token {
+        request.bearer_auth(t)
+    } else {
+        request
+    }
+}
+
+#[derive(Deserialize)]
+struct PbList<T> {
+    items: Vec<T>,
+}
+
+#[derive(Deserialize)]
+struct PbRoomCreateResp {
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct PbRoomRow {
+    id: String,
+    node_addr: String,
+}
+
+#[derive(Deserialize)]
+struct PbRoomIdRow {
+    id: String,
+}
+
+async fn cleanup_expired_rooms(
+    client: &reqwest::Client,
+    api_base: &str,
+    token: Option<&str>,
+) -> Result<(), String> {
+    let mut url = reqwest::Url::parse(&format!("{api_base}/collections/rooms/records"))
+        .map_err(|e| format!("Invalid PocketBase URL: {e}"))?;
+    let now = unix_now_secs();
+    {
+        let mut qp = url.query_pairs_mut();
+        qp.append_pair("filter", &format!("expires_at <= {now}"));
+        qp.append_pair("fields", "id");
+        qp.append_pair("perPage", "200");
+    }
+
+    let req = with_pocketbase_auth(client.get(url), token);
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("PocketBase cleanup list failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("PocketBase cleanup list error: {e}"))?;
+
+    let rows = resp
+        .json::<PbList<PbRoomIdRow>>()
+        .await
+        .map_err(|e| format!("PocketBase cleanup parse failed: {e}"))?;
+
+    for row in rows.items {
+        let req = with_pocketbase_auth(
+            client.delete(format!("{api_base}/collections/rooms/records/{}", row.id)),
+            token,
+        );
+        if let Err(e) = req.send().await {
+            eprintln!("[transport] PocketBase cleanup delete failed: {e}");
+        }
+    }
+
+    Ok(())
+}
+
+async fn delete_room_record(
+    client: &reqwest::Client,
+    api_base: &str,
+    token: Option<&str>,
+    room_id: &str,
+) -> Result<(), String> {
+    with_pocketbase_auth(
+        client.delete(format!("{api_base}/collections/rooms/records/{room_id}")),
+        token,
+    )
+    .send()
+    .await
+    .map_err(|e| format!("PocketBase delete failed: {e}"))?
+    .error_for_status()
+    .map_err(|e| format!("PocketBase delete error: {e}"))?;
+    Ok(())
 }
 
 // ─── Tauri commands ───────────────────────────────────────────────────────────
@@ -320,9 +455,9 @@ pub async fn connect_to_peer(
     Ok(())
 }
 
-/// Host an online game: post our EndpointAddr to Supabase and wait for a peer.
+/// Host an online game: post our EndpointAddr to PocketBase and wait for a peer.
 ///
-/// Returns the 6-character room code to display to the user.
+/// Returns the 4-digit room code to display to the user.
 /// Emits `peer-connected` when the first peer joins.
 #[tauri::command]
 pub async fn host_online(
@@ -336,29 +471,46 @@ pub async fn host_online(
     // Generate a random 4-digit numeric room code
     let code: String = format!("{:04}", rand::random::<u32>() % 10000);
 
-    // Post to Supabase
+    let api_base = pocketbase_api_base()?;
+    let token = pocketbase_token();
     let client = reqwest::Client::new();
+    let expires_at = unix_now_secs() + ROOM_TTL_SECS;
+
+    // Best-effort cleanup to keep room collection bounded.
+    if let Err(e) = cleanup_expired_rooms(&client, &api_base, token.as_deref()).await {
+        eprintln!("[transport] cleanup_expired_rooms failed: {e}");
+    }
+
+    // Create room record in PocketBase.
     let body = serde_json::json!({
         "code": code,
         "node_addr": node_addr_json,
+        "expires_at": expires_at,
     });
-    client
-        .post(format!("{}/rest/v1/rooms", SUPABASE_URL))
-        .header("apikey", SUPABASE_ANON_KEY)
-        .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+    let create_req = with_pocketbase_auth(
+        client.post(format!("{api_base}/collections/rooms/records")),
+        token.as_deref(),
+    )
         .header("Content-Type", "application/json")
-        .header("Prefer", "return=minimal")
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Supabase POST failed: {e}"))?
+        .map_err(|e| format!("PocketBase create failed: {e}"))?
         .error_for_status()
-        .map_err(|e| format!("Supabase POST error: {e}"))?;
+        .map_err(|e| format!("PocketBase create error: {e}"))?;
+    let create_resp = create_req
+        .json::<PbRoomCreateResp>()
+        .await
+        .map_err(|e| format!("PocketBase create parse failed: {e}"))?;
+    *transport.hosted_room_id.lock().await = Some(create_resp.id);
 
     // Spawn a background task to accept the incoming peer connection
     let ep = ep.clone();
     let transport_conn = transport.connection.clone();
+    let hosted_room_id = transport.hosted_room_id.clone();
     let msg_tx = transport.msg_tx.clone();
+    let api_base_for_task = api_base.clone();
+    let token_for_task = token.clone();
 
     // Abort any previous background task
     if let Some(old) = transport.bg_task.lock().await.take() { old.abort(); }
@@ -376,6 +528,17 @@ pub async fn host_online(
                                 Ok(conn) => {
                                     *transport_conn.lock().await = Some(conn.clone());
                                     spawn_recv_loop(conn, msg_tx.clone());
+                                    if let Some(room_id) = hosted_room_id.lock().await.take() {
+                                        let client = reqwest::Client::new();
+                                        if let Err(e) = delete_room_record(
+                                            &client,
+                                            &api_base_for_task,
+                                            token_for_task.as_deref(),
+                                            &room_id,
+                                        ).await {
+                                            eprintln!("[transport] host room delete failed: {e}");
+                                        }
+                                    }
                                     let _ = app.emit("peer-connected", ());
                                     break; // Accept only one peer
                                 }
@@ -397,7 +560,7 @@ pub async fn host_online(
 
 /// Join an online game by entering the host's room code.
 ///
-/// Spawns a background task that polls Supabase then connects via QUIC.
+/// Spawns a background task that polls PocketBase then connects via QUIC.
 /// Emits `peer-connected` on success or `join-error` on failure.
 #[tauri::command]
 pub async fn join_online(
@@ -409,49 +572,61 @@ pub async fn join_online(
     let ep = transport.endpoint().await?.clone();
     let transport_conn = transport.connection.clone();
     let msg_tx = transport.msg_tx.clone();
+    let api_base = pocketbase_api_base()?;
+    let token = pocketbase_token();
 
     // Abort any previous background task
     if let Some(old) = transport.bg_task.lock().await.take() { old.abort(); }
 
     let handle = tokio::spawn(async move {
         let client = reqwest::Client::new();
-        let url = format!("{}/rest/v1/rooms?code=eq.{}&select=node_addr", SUPABASE_URL, code);
-
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        let mut node_addr_json: Option<String> = None;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(JOIN_TIMEOUT_SECS);
+        let mut room: Option<PbRoomRow> = None;
         loop {
             if tokio::time::Instant::now() >= deadline { break; }
-            match client
-                .get(&url)
-                .header("apikey", SUPABASE_ANON_KEY)
-                .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
-                .send()
-                .await
+            let now = unix_now_secs();
+            let filter = format!("code = \"{}\" && expires_at > {}", code, now);
+            let mut url = match reqwest::Url::parse(&format!("{api_base}/collections/rooms/records")) {
+                Ok(u) => u,
+                Err(e) => {
+                    let _ = app.emit("join-error", format!("Invalid PocketBase URL: {e}"));
+                    return;
+                }
+            };
             {
+                let mut qp = url.query_pairs_mut();
+                qp.append_pair("filter", &filter);
+                qp.append_pair("perPage", "1");
+                qp.append_pair("sort", "-expires_at");
+                qp.append_pair("fields", "id,node_addr");
+            }
+
+            let req = with_pocketbase_auth(client.get(url), token.as_deref());
+            match req.send().await {
                 Ok(resp) => {
-                    #[derive(Deserialize)]
-                    struct Row { node_addr: String }
-                    if let Ok(rows) = resp.json::<Vec<Row>>().await {
-                        if let Some(row) = rows.into_iter().next() {
-                            node_addr_json = Some(row.node_addr);
-                            break;
+                    if let Ok(resp) = resp.error_for_status() {
+                        if let Ok(rows) = resp.json::<PbList<PbRoomRow>>().await {
+                            if let Some(found) = rows.items.into_iter().next() {
+                                room = Some(found);
+                                break;
+                            }
                         }
                     }
                 }
                 Err(_) => {}
             }
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(JOIN_POLL_INTERVAL_SECS)).await;
         }
 
-        let json = match node_addr_json {
-            Some(j) => j,
+        let found_room = match room {
+            Some(r) => r,
             None => {
                 let _ = app.emit("join-error", format!("Room '{}' not found", code));
                 return;
             }
         };
 
-        let addr = match addr_from_json(&json) {
+        let addr = match addr_from_json(&found_room.node_addr) {
             Ok(a) => a,
             Err(e) => { let _ = app.emit("join-error", e); return; }
         };
@@ -460,6 +635,14 @@ pub async fn join_online(
             Ok(conn) => {
                 *transport_conn.lock().await = Some(conn.clone());
                 spawn_recv_loop(conn, msg_tx);
+                if let Err(e) = delete_room_record(
+                    &client,
+                    &api_base,
+                    token.as_deref(),
+                    &found_room.id,
+                ).await {
+                    eprintln!("[transport] join room delete failed: {e}");
+                }
                 let _ = app.emit("peer-connected", ());
             }
             Err(e) => { let _ = app.emit("join-error", e.to_string()); }
@@ -474,6 +657,23 @@ pub async fn join_online(
 pub async fn cancel_online(transport: State<'_, TransportState>) -> Result<(), String> {
     if let Some(handle) = transport.bg_task.lock().await.take() { handle.abort(); }
     if let Some(handle) = transport.addr_server_task.lock().await.take() { handle.abort(); }
+
+    if let Ok(api_base) = pocketbase_api_base() {
+        let token = pocketbase_token();
+        let client = reqwest::Client::new();
+
+        if let Some(room_id) = transport.hosted_room_id.lock().await.take() {
+            if let Err(e) = delete_room_record(&client, &api_base, token.as_deref(), &room_id).await {
+                eprintln!("[transport] cancel room delete failed: {e}");
+            }
+        }
+
+        // Best-effort sweep to remove any already-expired rooms.
+        if let Err(e) = cleanup_expired_rooms(&client, &api_base, token.as_deref()).await {
+            eprintln!("[transport] cancel cleanup sweep failed: {e}");
+        }
+    }
+
     Ok(())
 }
 
