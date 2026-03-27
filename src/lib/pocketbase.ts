@@ -1,4 +1,4 @@
-const DEFAULT_POCKETBASE_URL = "https://puckduel.dano.win/_/";
+const DEFAULT_POCKETBASE_URL = "https://puckduel.dano.win/";
 const ROOM_TTL_SECS = 5 * 60;
 
 export interface RoomRecord {

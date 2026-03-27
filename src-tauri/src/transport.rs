@@ -6,7 +6,7 @@ use iroh::{Endpoint, EndpointAddr, endpoint::RelayMode};
 use iroh::endpoint::Connection;
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::{broadcast, Mutex, OnceCell};
+use tokio::sync::{broadcast, Mutex};
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 
 /// ALPN protocol identifier for Puck Duel
@@ -26,8 +26,8 @@ const JOIN_POLL_INTERVAL_SECS: u64 = 1;
 
 /// Managed state for the iroh transport layer.
 pub struct TransportState {
-    /// Lazily-initialized iroh Endpoint (created on first use)
-    endpoint: OnceCell<Endpoint>,
+    /// Lazily-initialized iroh Endpoint (created on first use; replaced on reset)
+    endpoint: Mutex<Option<Endpoint>>,
     /// The active peer connection, shared with the game loop
     pub connection: Arc<Mutex<Option<Connection>>>,
     /// Broadcast channel — received datagrams are decoded to UTF-8 and sent here
@@ -44,7 +44,7 @@ impl TransportState {
     pub fn new() -> Self {
         let (msg_tx, _) = broadcast::channel(64);
         Self {
-            endpoint: OnceCell::new(),
+            endpoint: Mutex::new(None),
             connection: Arc::new(Mutex::new(None)),
             msg_tx,
             bg_task: Arc::new(Mutex::new(None)),
@@ -54,17 +54,19 @@ impl TransportState {
     }
 
     /// Returns the endpoint, initializing it lazily on first call.
-    pub async fn endpoint(&self) -> Result<&Endpoint, String> {
-        self.endpoint
-            .get_or_try_init(|| async {
-                Endpoint::builder()
-                    .relay_mode(RelayMode::Disabled)
-                    .alpns(vec![ALPN.to_vec()])
-                    .bind()
-                    .await
-                    .map_err(|e| e.to_string())
-            })
-            .await
+    /// Returns a clone (Endpoint is Arc-backed, so this is cheap).
+    pub async fn endpoint(&self) -> Result<Endpoint, String> {
+        let mut guard = self.endpoint.lock().await;
+        if guard.is_none() {
+            let ep = Endpoint::builder()
+                .relay_mode(RelayMode::Disabled)
+                .alpns(vec![ALPN.to_vec()])
+                .bind()
+                .await
+                .map_err(|e| e.to_string())?;
+            *guard = Some(ep);
+        }
+        Ok(guard.as_ref().unwrap().clone())
     }
 }
 
@@ -81,7 +83,13 @@ fn addr_from_json(s: &str) -> Result<EndpointAddr, String> {
 }
 
 /// Spawn a task that reads datagrams from `conn` and broadcasts them on `msg_tx`.
-fn spawn_recv_loop(conn: Connection, msg_tx: broadcast::Sender<String>) {
+/// Emits `peer-disconnected` and clears the connection when the loop exits.
+fn spawn_recv_loop(
+    conn: Connection,
+    msg_tx: broadcast::Sender<String>,
+    connection: Arc<Mutex<Option<Connection>>>,
+    app: AppHandle,
+) {
     tokio::spawn(async move {
         loop {
             match conn.read_datagram().await {
@@ -93,6 +101,8 @@ fn spawn_recv_loop(conn: Connection, msg_tx: broadcast::Sender<String>) {
                 Err(_) => break, // connection closed
             }
         }
+        *connection.lock().await = None;
+        let _ = app.emit("peer-disconnected", ());
     });
 }
 
@@ -103,7 +113,7 @@ async fn activate_connection(
     app: &AppHandle,
 ) {
     *state.connection.lock().await = Some(conn.clone());
-    spawn_recv_loop(conn, state.msg_tx.clone());
+    spawn_recv_loop(conn, state.msg_tx.clone(), state.connection.clone(), app.clone());
     let _ = app.emit("peer-connected", ());
 }
 
@@ -421,7 +431,7 @@ pub async fn start_accept_loop(
                         Ok(accepting) => match accepting.await {
                             Ok(conn) => {
                                 *transport_conn.lock().await = Some(conn.clone());
-                                spawn_recv_loop(conn, msg_tx.clone());
+                                spawn_recv_loop(conn, msg_tx.clone(), transport_conn.clone(), app.clone());
                                 let _ = app.emit("peer-connected", ());
                                 break;
                             }
@@ -442,6 +452,7 @@ pub async fn start_accept_loop(
 /// Connect to a peer given their EndpointAddr JSON.
 ///
 /// On success, stores the connection and emits `peer-connected`.
+/// Retries up to 3 times with a 2-second delay to handle transient hole-punch failures.
 #[tauri::command]
 pub async fn connect_to_peer(
     transport: State<'_, TransportState>,
@@ -450,8 +461,33 @@ pub async fn connect_to_peer(
 ) -> Result<(), String> {
     let addr: EndpointAddr = addr_from_json(&node_addr_json)?;
     let ep = transport.endpoint().await?;
-    let conn = ep.connect(addr, ALPN).await.map_err(|e| e.to_string())?;
-    activate_connection(&transport, conn, &app).await;
+    let mut last_err = String::new();
+    for attempt in 0..3u32 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        match ep.connect(addr.clone(), ALPN).await {
+            Ok(conn) => {
+                activate_connection(&transport, conn, &app).await;
+                return Ok(());
+            }
+            Err(e) => last_err = e.to_string(),
+        }
+    }
+    Err(last_err)
+}
+
+/// Reset the transport layer: abort tasks, drop the connection and endpoint.
+/// Must be called after a network change before re-hosting or re-joining.
+#[tauri::command]
+pub async fn reset_transport(transport: State<'_, TransportState>) -> Result<(), String> {
+    if let Some(old) = transport.bg_task.lock().await.take() { old.abort(); }
+    if let Some(old) = transport.addr_server_task.lock().await.take() { old.abort(); }
+    *transport.connection.lock().await = None;
+    *transport.hosted_room_id.lock().await = None;
+    // Drop the old endpoint so the next call to endpoint() creates a fresh one.
+    let _old_ep = transport.endpoint.lock().await.take();
+    // _old_ep is dropped here, which closes the QUIC endpoint.
     Ok(())
 }
 
@@ -527,7 +563,7 @@ pub async fn host_online(
                             match accepting.await {
                                 Ok(conn) => {
                                     *transport_conn.lock().await = Some(conn.clone());
-                                    spawn_recv_loop(conn, msg_tx.clone());
+                                    spawn_recv_loop(conn, msg_tx.clone(), transport_conn.clone(), app.clone());
                                     if let Some(room_id) = hosted_room_id.lock().await.take() {
                                         let client = reqwest::Client::new();
                                         if let Err(e) = delete_room_record(
@@ -634,7 +670,7 @@ pub async fn join_online(
         match ep.connect(addr, ALPN).await {
             Ok(conn) => {
                 *transport_conn.lock().await = Some(conn.clone());
-                spawn_recv_loop(conn, msg_tx);
+                spawn_recv_loop(conn, msg_tx, transport_conn.clone(), app.clone());
                 if let Err(e) = delete_room_record(
                     &client,
                     &api_base,

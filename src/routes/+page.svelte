@@ -163,6 +163,7 @@
   // ── Event listeners ────────────────────────────────────────────────────
   let unlistenPeerConnected: UnlistenFn | null = null;
   let unlistenPeerFound: UnlistenFn | null = null;
+  let unlistenPeerDisconnected: UnlistenFn | null = null;
 
   onMount(async () => {
     unlistenPeerConnected = await listen("peer-connected", () => {
@@ -184,6 +185,19 @@
       }
     });
 
+    unlistenPeerDisconnected = await listen("peer-disconnected", async () => {
+      if (screen !== "game") return;
+      await invoke("reset_transport").catch(() => {});
+      if (isHost) {
+        // Re-host with fresh endpoint so opponent can rejoin
+        await startOnlineHost();
+      } else {
+        onlineError = "Connection lost — tap Join (Online) to reconnect.";
+        onlineConnecting = false;
+        screen = "online_join";
+      }
+    });
+
     // always run discovery so peers see us
     invoke("start_discovery").catch(() => {});
   });
@@ -191,6 +205,7 @@
   onDestroy(() => {
     if (unlistenPeerConnected) unlistenPeerConnected();
     if (unlistenPeerFound) unlistenPeerFound();
+    if (unlistenPeerDisconnected) unlistenPeerDisconnected();
     invoke("stop_discovery").catch(() => {});
     cancelOnlineSession().catch(() => {});
   });
@@ -298,6 +313,7 @@
       <div class="text-3xl">🔑</div>
       <h2 class="text-2xl font-black text-yellow-400">Online — Join</h2>
       <p class="text-neutral-400 text-sm">Enter the 4-digit code from your friend</p>
+      <p class="text-neutral-600 text-xs">Requires a stable internet connection. If connection fails, try again — it may succeed on retry.</p>
       <input
         type="text"
         inputmode="numeric"
