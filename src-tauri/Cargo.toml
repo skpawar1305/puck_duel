@@ -30,4 +30,5 @@ mdns-sd = "0.18"
 base64 = "0.22"
 rand = "0.8"
 hex = "0.4"
+tauri-plugin-admob = "0.0.4"
 

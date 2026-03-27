@@ -5,6 +5,7 @@
     import { playHit, playWall, playMyGoal, playOpponentGoal,
              playNearMiss, playCountdownTick, playCountdownGo,
              playWin, playLose, initAudio } from "$lib/audio";
+    import { InterstitialAd } from "tauri-plugin-admob-api";
 
     let {
         isHost,
@@ -19,6 +20,33 @@
     }>();
 
     const WINNING_SCORE = 6;
+
+    const AD_UNIT_ID = "ca-app-pub-7224112237798955/1828655479";
+    // Preloaded interstitial — ready before game ends
+    let preloadedAd: InstanceType<typeof InterstitialAd> | null = null;
+
+    async function preloadAd() {
+        try {
+            const ad = new InterstitialAd({ adUnitId: AD_UNIT_ID });
+            await ad.load();
+            preloadedAd = ad;
+        } catch {
+            preloadedAd = null;
+        }
+    }
+
+    async function showInterstitial() {
+        const ad = preloadedAd;
+        preloadedAd = null;
+        // Start preloading the next one immediately
+        preloadAd();
+        if (!ad) return;
+        try {
+            await ad.show();
+        } catch {
+            // Ad failure is non-fatal — game-over overlay always shows
+        }
+    }
 
     // ── Constants (render only) ───────────────────────────────────────────────
     const TW = 360,
@@ -64,6 +92,9 @@
     let gameOver = $state(false);
     let iWon = $state(false);
     let muted = $state(false);
+
+    // Pending pointer position — flushed to Rust once per rAF frame
+    let pendingPtr: [number, number] | null = null;
 
     // Trail maintained locally (JS side) from puck position updates
     let trail: { x: number; y: number; age: number }[] = [];
@@ -144,6 +175,13 @@
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
+
+        // Flush buffered pointer position — one IPC call per frame instead of per event
+        if (pendingPtr) {
+            const [x, y] = pendingPtr;
+            pendingPtr = null;
+            invoke("set_pointer", { x, y }).catch(() => {});
+        }
 
         const dt = lastTime ? Math.min((ts - lastTime) / 1000, 0.05) : 0;
         lastTime = ts;
@@ -426,6 +464,7 @@
                 const myIdx = isHost ? 0 : 1;
                 iWon = state.score[myIdx] >= WINNING_SCORE;
                 invoke("stop_game").catch(() => {});
+                showInterstitial();
             }
         };
         await invoke("start_game", { isHost, isSinglePlayer, channel: ch, useUdp });
@@ -451,12 +490,13 @@
     function onPointerMove(e: PointerEvent) {
         e.preventDefault();
         const [x, y] = tableCoords(e.clientX, e.clientY);
-        // Fire-and-forget — no await, set_pointer is a trivial Mutex write in Rust
-        invoke("set_pointer", { x, y }).catch(() => {});
+        // Buffer position — flushed to Rust once per rAF frame in draw()
+        pendingPtr = [x, y];
     }
 
     // ── Mount ─────────────────────────────────────────────────────────────────
     onMount(async () => {
+        preloadAd(); // start loading while the game initialises
         const dpr = window.devicePixelRatio || 1;
         resizeFn = () => {
             canvas.width = window.innerWidth * dpr;
@@ -485,6 +525,7 @@
                 const myIdx = isHost ? 0 : 1;
                 iWon = state.score[myIdx] >= WINNING_SCORE;
                 invoke("stop_game").catch(() => {});
+                showInterstitial();
             }
         };
 
