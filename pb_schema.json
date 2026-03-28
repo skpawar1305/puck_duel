@@ -4,7 +4,7 @@
         "listRule": "",
         "viewRule": "",
         "createRule": "",
-        "updateRule": null,
+        "updateRule": "",
         "deleteRule": "",
         "name": "rooms",
         "type": "base",
@@ -82,6 +82,20 @@
                 "presentable": false,
                 "system": false,
                 "type": "autodate"
+            },
+            {
+                "autogeneratePattern": "",
+                "hidden": false,
+                "id": "text9876543210",
+                "max": 0,
+                "min": 0,
+                "name": "joiner_addr",
+                "pattern": "",
+                "presentable": false,
+                "primaryKey": false,
+                "required": false,
+                "system": false,
+                "type": "text"
             }
         ],
         "indexes": [

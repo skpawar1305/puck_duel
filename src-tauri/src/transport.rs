@@ -7,6 +7,7 @@ use iroh::endpoint::Connection;
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{broadcast, Mutex};
+use tokio::time::{timeout, timeout_at, Instant};
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 
 /// ALPN protocol identifier for Puck Duel
@@ -407,6 +408,38 @@ pub async fn discover_lan(
     Ok(())
 }
 
+// ─── Bidirectional-connect helpers ────────────────────────────────────────────
+
+/// Fetch the joiner's EndpointAddr JSON from the room record (returns None if not set yet).
+async fn fetch_joiner_addr(
+    client: &reqwest::Client,
+    api_base: &str,
+    token: Option<&str>,
+    room_id: &str,
+) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Resp {
+        #[serde(default)]
+        joiner_addr: Option<String>,
+    }
+    let url = format!("{}/collections/rooms/records/{}?fields=joiner_addr", api_base, room_id);
+    let resp = with_pocketbase_auth(client.get(&url), token)
+        .send().await.ok()?
+        .error_for_status().ok()?
+        .json::<Resp>().await.ok()?;
+    resp.joiner_addr.filter(|s| !s.is_empty())
+}
+
+/// Store the room ID so the host's accept loop knows which room to poll for joiner_addr.
+#[tauri::command]
+pub async fn set_hosted_room_id(
+    transport: State<'_, TransportState>,
+    room_id: String,
+) -> Result<(), String> {
+    *transport.hosted_room_id.lock().await = Some(room_id);
+    Ok(())
+}
+
 /// Start listening for an incoming peer connection (LAN host mode).
 ///
 /// Spawns a background task that accepts exactly one peer and emits `peer-connected`.
@@ -418,30 +451,81 @@ pub async fn start_accept_loop(
     let ep = transport.endpoint().await?.clone();
     let transport_conn = transport.connection.clone();
     let msg_tx = transport.msg_tx.clone();
+    let hosted_room_id = transport.hosted_room_id.clone();
+
+    // Clear any stale room id from a previous session.
+    *hosted_room_id.lock().await = None;
 
     // Abort any previous background task
     if let Some(old) = transport.bg_task.lock().await.take() { old.abort(); }
 
+    let api_base = pocketbase_api_base().ok();
+    let token = pocketbase_token();
+
     let handle = tokio::spawn(async move {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
-        loop {
-            match tokio::time::timeout_at(deadline, ep.accept()).await {
-                Ok(Some(incoming)) => {
-                    match incoming.accept() {
-                        Ok(accepting) => match accepting.await {
-                            Ok(conn) => {
-                                *transport_conn.lock().await = Some(conn.clone());
-                                spawn_recv_loop(conn, msg_tx.clone(), transport_conn.clone(), app.clone());
-                                let _ = app.emit("peer-connected", ());
-                                break;
-                            }
-                            Err(e) => eprintln!("[transport] LAN handshake error: {e}"),
+        let deadline = Instant::now() + Duration::from_secs(300);
+
+        // Path 1: wait for the joiner to connect to us (classic accept).
+        let accept_fut = {
+            let ep = ep.clone();
+            async move {
+                loop {
+                    match timeout_at(deadline, ep.accept()).await {
+                        Ok(Some(incoming)) => match incoming.accept() {
+                            Ok(accepting) => match accepting.await {
+                                Ok(conn) => return Some(conn),
+                                Err(e) => eprintln!("[transport] accept handshake: {e}"),
+                            },
+                            Err(e) => eprintln!("[transport] accept: {e}"),
                         },
-                        Err(e) => eprintln!("[transport] LAN accept error: {e}"),
+                        _ => return None,
                     }
                 }
-                Ok(None) | Err(_) => break,
             }
+        };
+
+        // Path 2: poll PocketBase for joiner's addr, then connect to them.
+        // This lets us reach joiners that have a public IPv6 but whose host (us) only
+        // has a private IPv4 — the roles are effectively reversed for the TCP handshake.
+        let connect_fut = {
+            let ep = ep.clone();
+            async move {
+                let api_base = match api_base {
+                    Some(s) => s,
+                    None => return None,
+                };
+                let client = reqwest::Client::new();
+                loop {
+                    if Instant::now() >= deadline { return None; }
+
+                    let room_id = hosted_room_id.lock().await.clone();
+                    if let Some(ref rid) = room_id {
+                        if let Some(joiner_json) = fetch_joiner_addr(&client, &api_base, token.as_deref(), rid).await {
+                            if let Ok(joiner_addr) = addr_from_json(&joiner_json) {
+                                match timeout(Duration::from_secs(10), ep.connect(joiner_addr, ALPN)).await {
+                                    Ok(Ok(conn)) => return Some(conn),
+                                    Ok(Err(e)) => eprintln!("[transport] connect-to-joiner failed: {e}"),
+                                    Err(_) => eprintln!("[transport] connect-to-joiner timed out"),
+                                }
+                            }
+                            // joiner_addr was present but connect failed — fall back to accept only
+                            return None;
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            }
+        };
+
+        let conn = tokio::select! {
+            conn = accept_fut => conn,
+            conn = connect_fut => conn,
+        };
+
+        if let Some(conn) = conn {
+            *transport_conn.lock().await = Some(conn.clone());
+            spawn_recv_loop(conn, msg_tx, transport_conn, app.clone());
+            let _ = app.emit("peer-connected", ());
         }
     });
     *transport.bg_task.lock().await = Some(handle);
@@ -451,8 +535,11 @@ pub async fn start_accept_loop(
 
 /// Connect to a peer given their EndpointAddr JSON.
 ///
-/// On success, stores the connection and emits `peer-connected`.
-/// Retries up to 3 times with a 2-second delay to handle transient hole-punch failures.
+/// Races two paths simultaneously:
+///   1. We connect outbound to the peer's known addresses.
+///   2. We accept an incoming connection in case the peer connects to us first.
+/// Whichever succeeds first wins.  This bidirectional approach lets us reach peers
+/// whose addresses include a public IPv6 even when our own IP is behind NAT.
 #[tauri::command]
 pub async fn connect_to_peer(
     transport: State<'_, TransportState>,
@@ -461,20 +548,56 @@ pub async fn connect_to_peer(
 ) -> Result<(), String> {
     let addr: EndpointAddr = addr_from_json(&node_addr_json)?;
     let ep = transport.endpoint().await?;
-    let mut last_err = String::new();
-    for attempt in 0..3u32 {
-        if attempt > 0 {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-        }
-        match ep.connect(addr.clone(), ALPN).await {
-            Ok(conn) => {
-                activate_connection(&transport, conn, &app).await;
-                return Ok(());
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    // Path 1: connect outbound (with up to 3 attempts).
+    let connect_fut = {
+        let ep = ep.clone();
+        let addr = addr.clone();
+        async move {
+            for attempt in 0..3u32 {
+                if attempt > 0 {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+                if let Ok(conn) = ep.connect(addr.clone(), ALPN).await {
+                    return Some(conn);
+                }
             }
-            Err(e) => last_err = e.to_string(),
+            None
         }
+    };
+
+    // Path 2: accept an incoming connection (peer may connect to us first).
+    let accept_fut = {
+        let ep = ep.clone();
+        async move {
+            loop {
+                match timeout_at(deadline, ep.accept()).await {
+                    Ok(Some(incoming)) => match incoming.accept() {
+                        Ok(accepting) => match accepting.await {
+                            Ok(conn) => return Some(conn),
+                            Err(_) => {}
+                        },
+                        Err(_) => {}
+                    },
+                    _ => return None,
+                }
+            }
+        }
+    };
+
+    let conn = tokio::select! {
+        conn = connect_fut => conn,
+        conn = accept_fut => conn,
+    };
+
+    match conn {
+        Some(conn) => {
+            activate_connection(&transport, conn, &app).await;
+            Ok(())
+        }
+        None => Err("Connection failed: could not reach peer".into()),
     }
-    Err(last_err)
 }
 
 /// Reset the transport layer: abort tasks, drop the connection and endpoint.

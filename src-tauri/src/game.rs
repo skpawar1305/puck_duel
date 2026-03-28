@@ -210,24 +210,23 @@ impl GameState {
             let puck_approach  = self.puck.vy < -30.0;
 
             let (spd, tgt_x, tgt_y): (f32, f32, f32) = if puck_behind {
-                // Chase the puck back — predict where it will be at interception
-                let t = if self.puck.vy < -1.0 {
-                    ((apy - self.puck.y) / (-self.puck.vy)).min(0.5)
-                } else { 0.0 };
-                let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
-                let ty = (self.puck.y - 20.0).max(PAR);
-                (9.0, pred_x, ty)
+                // Puck slipped past AI paddle — chase directly
+                let ty = (self.puck.y - 15.0).max(PAR);
+                (12.0, self.puck.x, ty)
             } else if puck_in_half || puck_approach {
-                // Puck in AI half or approaching — intercept with prediction
+                // Puck in AI half or approaching — intercept: position AI between puck and its own goal
+                // t: time until puck reaches AI's current Y (apy - puck.y and vy both negative when
+                // puck is below AI moving upward, so the division gives a correct positive value)
                 let t = if self.puck.vy.abs() > 10.0 {
-                    ((apy - self.puck.y) / self.puck.vy.abs()).clamp(0.0, 0.4)
+                    ((apy - self.puck.y) / self.puck.vy).clamp(0.0, 0.4)
                 } else { 0.0 };
                 let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
-                let ty = (self.puck.y + 55.0).max(PAR).min(TH / 2.0 - PAR);
-                (5.5, pred_x, ty)
+                // Stay 50 px above (goal-side of) the puck so the paddle blocks the path
+                let ty = (self.puck.y - 50.0).clamp(PAR, TH / 2.0 - PAR / 2.0);
+                (8.0, pred_x, ty)
             } else {
-                // Puck in host half — return to defensive position
-                (1.8, self.puck.x, 110.0)
+                // Puck in host half — return to centred defensive home
+                (3.5, TW / 2.0, 110.0)
             };
 
             ai.x += (tgt_x - ai.x) * (spd * dt).min(1.0);
@@ -562,14 +561,15 @@ pub async fn start_game(
     let handle = tokio::spawn(async move {
         let mut gs       = GameState::new(is_host, is_single_player);
         let mut interval = tokio::time::interval(Duration::from_nanos(16_666_667));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut last     = Instant::now();
 
         while running.load(Ordering::Relaxed) {
             interval.tick().await;
             if paused.load(Ordering::Relaxed) { continue; }
             let now = Instant::now();
-            let dt  = now.duration_since(last).as_secs_f32().min(0.05);
+            // Cap at 33 ms (2 frames) — prevents large physics jumps after scheduler delays
+            let dt  = now.duration_since(last).as_secs_f32().min(0.033);
             last = now;
 
             // Drain ALL pending network messages (take only the latest if multiple arrived)
