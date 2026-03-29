@@ -6,7 +6,7 @@
   import { initAudio } from "$lib/audio";
   import QRCode from 'qrcode';
   import QRScanner from '$lib/components/QRScanner.svelte';
-  import { cleanupExpiredRooms, createRoom, deleteRoom, findRoomByCode, generateRoomCode, updateRoomJoinerAddr } from "$lib/pocketbase";
+  import { cleanupExpiredRooms, createRoom, deleteRoom, findRoomByCode, generateRoomCode } from "$lib/pocketbase";
 
   let screen = $state<"menu" | "host" | "join" | "game" | "online_host" | "online_join">("menu");
   let isHost = $state(false);
@@ -154,13 +154,14 @@
       if (!room) {
         throw new Error(`Room '${joinCode.trim()}' not found`);
       }
-      // Post our own address to the room so the host can connect to us if needed.
-      // This is the key to bidirectional hole-punching: if the host is behind NAT
-      // but we have a public IPv6, the host can reach us even though we can't reach it.
+      // Post our own address as a separate room record (code = last 4 chars of host room ID).
+      // This avoids needing PATCH permission on the host's room — only createRule is needed.
       const ourAddr = (await invoke("get_our_node_addr")) as string;
-      await updateRoomJoinerAddr(room.id, ourAddr).catch(() => {});
+      const joinerCode = room.id.slice(-4);
+      const joinerRoomId = await createRoom(joinerCode, ourAddr).catch(() => null);
       await invoke("connect_to_peer", { nodeAddrJson: room.node_addr });
       await deleteRoom(room.id).catch(() => {});
+      if (joinerRoomId) await deleteRoom(joinerRoomId).catch(() => {});
       // peer-connected event fires from connect_to_peer → screen = "game"
     } catch (e: any) {
       onlineError = e?.toString() ?? "Failed to join";

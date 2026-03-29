@@ -410,24 +410,44 @@ pub async fn discover_lan(
 
 // ─── Bidirectional-connect helpers ────────────────────────────────────────────
 
-/// Fetch the joiner's EndpointAddr JSON from the room record (returns None if not set yet).
+/// Fetch the joiner's EndpointAddr JSON.
+///
+/// The joiner creates a separate room record whose code is the last 4 chars of the
+/// host's room ID.  This avoids needing a PATCH (updateRule) on the host room — only
+/// createRule is required, which is open.
 async fn fetch_joiner_addr(
     client: &reqwest::Client,
     api_base: &str,
     token: Option<&str>,
     room_id: &str,
 ) -> Option<String> {
+    if room_id.len() < 4 { return None; }
+    let joiner_code = &room_id[room_id.len() - 4..];
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let filter = format!("code=\"{}\"&&expires_at>{}", joiner_code, now_secs);
+
     #[derive(Deserialize)]
-    struct Resp {
-        #[serde(default)]
-        joiner_addr: Option<String>,
-    }
-    let url = format!("{}/collections/rooms/records/{}?fields=joiner_addr", api_base, room_id);
-    let resp = with_pocketbase_auth(client.get(&url), token)
-        .send().await.ok()?
-        .error_for_status().ok()?
-        .json::<Resp>().await.ok()?;
-    resp.joiner_addr.filter(|s| !s.is_empty())
+    struct Item { node_addr: String }
+    #[derive(Deserialize)]
+    struct Resp { items: Vec<Item> }
+
+    let url = format!("{}/collections/rooms/records", api_base);
+    let resp = with_pocketbase_auth(
+        client.get(&url).query(&[
+            ("filter", filter.as_str()),
+            ("fields", "node_addr"),
+            ("perPage", "1"),
+        ]),
+        token,
+    )
+    .send().await.ok()?
+    .error_for_status().ok()?
+    .json::<Resp>().await.ok()?;
+
+    resp.items.into_iter().next()
+        .map(|i| i.node_addr)
+        .filter(|s| !s.is_empty())
 }
 
 /// Store the room ID so the host's accept loop knows which room to poll for joiner_addr.
