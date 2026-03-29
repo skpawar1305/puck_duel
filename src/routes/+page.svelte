@@ -24,7 +24,6 @@
   let onlineConnecting = $state(false);
   let onlineError = $state("");
   let hostedRoomId = $state<string | null>(null);
-  let canRetry = $state(false);         // first attempt failed — retry button visible
   let retryRoomId = $state<string | null>(null); // room to post joiner addr to on retry
 
   async function createRoomWithRetry(nodeAddrJson: string): Promise<{ code: string; roomId: string }> {
@@ -46,7 +45,6 @@
     hostedRoomId = null;
     roomCode = "";
     onlineConnecting = false;
-    canRetry = false;
     retryRoomId = null;
     onlineError = "";
     if (roomId) {
@@ -154,24 +152,42 @@
     if (!joinCode.trim()) return;
     onlineConnecting = true;
     onlineError = "";
-    canRetry = false;
     retryRoomId = null;
+    let roomId: string | null = null;
     try {
       const room = await findRoomByCode(joinCode.trim());
       if (!room) {
         throw new Error(`Room '${joinCode.trim()}' not found`);
       }
+      roomId = room.id;
       retryRoomId = room.id;
+
+      // Post our address immediately so host can connect to us if direct connection fails
+      const ourAddr = (await invoke("get_our_node_addr")) as string;
+      await updateRoomJoinerAddr(roomId, ourAddr).catch(() => {});
+
       // First attempt: we connect outbound to the host.
-      // joiner_addr is intentionally NOT posted yet — it becomes the second-attempt
-      // address that the host uses if this direction fails and the user hits Retry.
       await invoke("connect_to_peer", { nodeAddrJson: room.node_addr });
-      await deleteRoom(room.id).catch(() => {});
+      await deleteRoom(roomId).catch(() => {});
       // peer-connected event fires from connect_to_peer → screen = "game"
+      roomId = null;
+      retryRoomId = null;
     } catch (e: any) {
-      if (retryRoomId) {
-        // Offer a retry where roles are swapped (host connects to us).
-        canRetry = true;
+      if (roomId) {
+        // Direct connection failed, but host may be trying to connect to us
+        // Wait a bit to see if host connects
+        onlineError = "Direct connection failed, waiting for host to connect...";
+
+        // Try accept mode as fallback
+        try {
+          await invoke("accept_from_peer");
+          await deleteRoom(roomId).catch(() => {});
+          // Success - peer-connected event will fire
+          return;
+        } catch (acceptErr: any) {
+          // Both directions failed
+          onlineError = "sorry, we couldn't connect you two directly 🙏  try joining on the same wi-fi, or ask the host to retry hosting.";
+        }
       } else {
         onlineError = e?.toString() ?? "Failed to join";
       }
@@ -179,24 +195,6 @@
     }
   }
 
-  async function retryJoinOnlineRoom() {
-    if (!retryRoomId) return;
-    onlineConnecting = true;
-    onlineError = "";
-    canRetry = false;
-    try {
-      // Second attempt: post our address so the host can connect outbound to us.
-      const ourAddr = (await invoke("get_our_node_addr")) as string;
-      await updateRoomJoinerAddr(retryRoomId, ourAddr).catch(() => {});
-      // Now sit in accept mode — the host's loop will find our address and connect.
-      await invoke("accept_from_peer");
-      await deleteRoom(retryRoomId).catch(() => {});
-    } catch (e: any) {
-      onlineError = "sorry, we couldn't connect you two directly 🙏  try joining on the same wi-fi, or ask the host to retry hosting.";
-      onlineConnecting = false;
-      retryRoomId = null;
-    }
-  }
 
   // ── Event listeners ────────────────────────────────────────────────────
   let unlistenPeerConnected: UnlistenFn | null = null;
@@ -353,8 +351,8 @@
       <p class="text-neutral-400 text-sm">Enter the 4-digit code from your friend</p>
       {#if onlineError}
         <p class="text-neutral-400 text-sm text-center">{onlineError}</p>
-      {:else if !canRetry}
-        <p class="text-neutral-600 text-xs text-center">Requires internet. If it fails, tap Retry — it tries the other direction.</p>
+      {:else}
+        <p class="text-neutral-600 text-xs text-center">Requires internet. Will automatically try both connection directions if needed.</p>
       {/if}
       <input
         type="text"
@@ -367,20 +365,11 @@
         class="w-full px-6 py-5 bg-neutral-800 text-white rounded-2xl border border-neutral-600 focus:border-yellow-500 outline-none font-mono text-4xl font-black tracking-widest text-center"
         onkeydown={(e) => e.key === 'Enter' && joinOnlineRoom()}
       />
-      {#if canRetry}
-        <p class="text-neutral-500 text-xs text-center">couldn't reach the host directly — tap Retry to try the other way</p>
-        <button
-          class="w-full py-4 bg-orange-600 text-white rounded-2xl text-lg font-bold hover:bg-orange-500 active:scale-95 disabled:opacity-40 uppercase tracking-widest"
-          onclick={retryJoinOnlineRoom}
-          disabled={onlineConnecting}
-        >{onlineConnecting ? "Connecting…" : "Retry"}</button>
-      {:else}
         <button
           class="w-full py-4 bg-yellow-600 text-white rounded-2xl text-lg font-bold hover:bg-yellow-500 active:scale-95 disabled:opacity-40 uppercase tracking-widest"
           onclick={joinOnlineRoom}
           disabled={onlineConnecting || joinCode.length < 4}
         >{onlineConnecting ? "Connecting…" : "Join"}</button>
-      {/if}
       <button
         class="w-full py-3 bg-neutral-700 text-white rounded-xl hover:bg-neutral-600"
         onclick={async () => { await cancelOnlineSession(); screen = "menu"; }}

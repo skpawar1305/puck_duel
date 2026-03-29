@@ -512,7 +512,7 @@ pub async fn start_accept_loop(
                     }
 
                     if let Some(ref joiner_addr) = cached_joiner_addr {
-                        match timeout(Duration::from_secs(8), ep.connect(joiner_addr.clone(), ALPN)).await {
+                        match timeout(Duration::from_secs(12), ep.connect(joiner_addr.clone(), ALPN)).await {
                             Ok(Ok(conn)) => return Some(conn),
                             Ok(Err(e)) => eprintln!("[transport] connect-to-joiner failed: {e}"),
                             Err(_) => eprintln!("[transport] connect-to-joiner timed out"),
@@ -520,7 +520,7 @@ pub async fn start_accept_loop(
                         // Retry after a short delay instead of giving up.
                         tokio::time::sleep(Duration::from_secs(2)).await;
                     } else {
-                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        tokio::time::sleep(Duration::from_millis(250)).await;
                     }
                 }
             }
@@ -566,14 +566,14 @@ pub async fn connect_to_peer(
 ) -> Result<(), String> {
     let addr: EndpointAddr = addr_from_json(&node_addr_json)?;
     let ep = transport.endpoint().await?;
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(25);
 
-    for attempt in 0..3u32 {
+    for attempt in 0..5u32 {
         if attempt > 0 {
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
         if Instant::now() >= deadline { break; }
-        match timeout(Duration::from_secs(4), ep.connect(addr.clone(), ALPN)).await {
+        match timeout(Duration::from_secs(6), ep.connect(addr.clone(), ALPN)).await {
             Ok(Ok(conn)) => {
                 activate_connection(&transport, conn, &app).await;
                 return Ok(());
