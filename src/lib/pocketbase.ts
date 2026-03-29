@@ -118,6 +118,20 @@ export async function findRoomByCode(code: string, timeoutMs = 30_000): Promise<
   return null;
 }
 
+export async function updateRoomJoinerAddr(roomId: string, joinerAddr: string): Promise<void> {
+  const api = pocketBaseApiBase();
+  const resp = await fetch(`${api}/collections/rooms/records/${roomId}`, {
+    method: "PATCH",
+    headers: headers(true),
+    body: JSON.stringify({ joiner_addr: joinerAddr }),
+  });
+
+  if (!resp.ok && resp.status !== 404) {
+    const text = await resp.text();
+    throw new Error(`PocketBase patch failed (${resp.status}): ${text || resp.statusText}`);
+  }
+}
+
 export async function deleteRoom(roomId: string): Promise<void> {
   const api = pocketBaseApiBase();
   const resp = await fetch(`${api}/collections/rooms/records/${roomId}`, {
