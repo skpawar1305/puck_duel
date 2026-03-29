@@ -553,13 +553,11 @@ pub async fn start_accept_loop(
     Ok(())
 }
 
-/// Connect to a peer given their EndpointAddr JSON.
+/// Connect outbound to a peer given their EndpointAddr JSON (first attempt, joiner → host).
 ///
-/// Races two paths simultaneously:
-///   1. We connect outbound to the peer's known addresses.
-///   2. We accept an incoming connection in case the peer connects to us first.
-/// Whichever succeeds first wins.  This bidirectional approach lets us reach peers
-/// whose addresses include a public IPv6 even when our own IP is behind NAT.
+/// Only tries direct outbound connections — no accept path.  If this fails, the caller
+/// should post their own address to the room and call `accept_from_peer` so the host
+/// can connect in the other direction (second attempt, host → joiner).
 #[tauri::command]
 pub async fn connect_to_peer(
     transport: State<'_, TransportState>,
@@ -568,71 +566,50 @@ pub async fn connect_to_peer(
 ) -> Result<(), String> {
     let addr: EndpointAddr = addr_from_json(&node_addr_json)?;
     let ep = transport.endpoint().await?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+
+    for attempt in 0..3u32 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        if Instant::now() >= deadline { break; }
+        match timeout(Duration::from_secs(4), ep.connect(addr.clone(), ALPN)).await {
+            Ok(Ok(conn)) => {
+                activate_connection(&transport, conn, &app).await;
+                return Ok(());
+            }
+            Ok(Err(e)) => eprintln!("[transport] connect attempt {attempt}: {e}"),
+            Err(_)     => eprintln!("[transport] connect attempt {attempt} timed out"),
+        }
+    }
+    Err("direct connection failed".into())
+}
+
+/// Wait for the host to connect to us (second attempt, host → joiner).
+///
+/// Called after the joiner has posted their address to the room.  The host's accept
+/// loop will discover that address and connect outbound; we simply accept here.
+#[tauri::command]
+pub async fn accept_from_peer(
+    transport: State<'_, TransportState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let ep = transport.endpoint().await?;
     let deadline = Instant::now() + Duration::from_secs(30);
-
-    // Path 1: connect outbound (with up to 3 attempts, each bounded).
-    let connect_fut = {
-        let ep = ep.clone();
-        let addr = addr.clone();
-        async move {
-            for attempt in 0..3u32 {
-                if attempt > 0 {
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                }
-                if Instant::now() >= deadline { break; }
-                match timeout(Duration::from_secs(8), ep.connect(addr.clone(), ALPN)).await {
-                    Ok(Ok(conn)) => return Some(conn),
-                    Ok(Err(e)) => eprintln!("[transport] outbound connect attempt {attempt}: {e}"),
-                    Err(_) => eprintln!("[transport] outbound connect attempt {attempt} timed out"),
-                }
-            }
-            None
+    loop {
+        match timeout_at(deadline, ep.accept()).await {
+            Ok(Some(incoming)) => match incoming.accept() {
+                Ok(accepting) => match accepting.await {
+                    Ok(conn) => {
+                        activate_connection(&transport, conn, &app).await;
+                        return Ok(());
+                    }
+                    Err(e) => eprintln!("[transport] accept_from_peer handshake: {e}"),
+                },
+                Err(e) => eprintln!("[transport] accept_from_peer: {e}"),
+            },
+            _ => return Err("timed out waiting for host to connect back".into()),
         }
-    };
-
-    // Path 2: accept an incoming connection (peer may connect to us first).
-    let accept_fut = {
-        let ep = ep.clone();
-        async move {
-            loop {
-                match timeout_at(deadline, ep.accept()).await {
-                    Ok(Some(incoming)) => match incoming.accept() {
-                        Ok(accepting) => match accepting.await {
-                            Ok(conn) => return Some(conn),
-                            Err(_) => {}
-                        },
-                        Err(_) => {}
-                    },
-                    _ => return None,
-                }
-            }
-        }
-    };
-
-    // Race outbound connect vs inbound accept. If one path finishes with None, wait for the other.
-    let mut connect_fut = Box::pin(connect_fut);
-    let mut accept_fut = Box::pin(accept_fut);
-    let conn = loop {
-        tokio::select! {
-            conn = &mut connect_fut => {
-                if let Some(c) = conn { break Some(c); }
-                // All outbound attempts failed; keep waiting for an inbound connection.
-                break accept_fut.await;
-            }
-            conn = &mut accept_fut => {
-                if let Some(c) = conn { break Some(c); }
-                // Accept timed out; wait for outbound.
-                break connect_fut.await;
-            }
-        }
-    };
-
-    match conn {
-        Some(conn) => {
-            activate_connection(&transport, conn, &app).await;
-            Ok(())
-        }
-        None => Err("Connection failed: could not reach peer".into()),
     }
 }
 
