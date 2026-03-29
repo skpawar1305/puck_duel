@@ -495,31 +495,51 @@ pub async fn start_accept_loop(
                     None => return None,
                 };
                 let client = reqwest::Client::new();
+                let mut cached_joiner_addr: Option<EndpointAddr> = None;
                 loop {
                     if Instant::now() >= deadline { return None; }
 
-                    let room_id = hosted_room_id.lock().await.clone();
-                    if let Some(ref rid) = room_id {
-                        if let Some(joiner_json) = fetch_joiner_addr(&client, &api_base, token.as_deref(), rid).await {
-                            if let Ok(joiner_addr) = addr_from_json(&joiner_json) {
-                                match timeout(Duration::from_secs(10), ep.connect(joiner_addr, ALPN)).await {
-                                    Ok(Ok(conn)) => return Some(conn),
-                                    Ok(Err(e)) => eprintln!("[transport] connect-to-joiner failed: {e}"),
-                                    Err(_) => eprintln!("[transport] connect-to-joiner timed out"),
+                    // Once we have a joiner addr, keep retrying connect rather than re-polling.
+                    if cached_joiner_addr.is_none() {
+                        let room_id = hosted_room_id.lock().await.clone();
+                        if let Some(ref rid) = room_id {
+                            if let Some(joiner_json) = fetch_joiner_addr(&client, &api_base, token.as_deref(), rid).await {
+                                if let Ok(joiner_addr) = addr_from_json(&joiner_json) {
+                                    cached_joiner_addr = Some(joiner_addr);
                                 }
                             }
-                            // joiner_addr was present but connect failed — fall back to accept only
-                            return None;
                         }
                     }
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+
+                    if let Some(ref joiner_addr) = cached_joiner_addr {
+                        match timeout(Duration::from_secs(8), ep.connect(joiner_addr.clone(), ALPN)).await {
+                            Ok(Ok(conn)) => return Some(conn),
+                            Ok(Err(e)) => eprintln!("[transport] connect-to-joiner failed: {e}"),
+                            Err(_) => eprintln!("[transport] connect-to-joiner timed out"),
+                        }
+                        // Retry after a short delay instead of giving up.
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                    } else {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    }
                 }
             }
         };
 
-        let conn = tokio::select! {
-            conn = accept_fut => conn,
-            conn = connect_fut => conn,
+        // Race accept vs connect-to-joiner; if one finishes with None, wait for the other.
+        let mut accept_fut = Box::pin(accept_fut);
+        let mut connect_fut = Box::pin(connect_fut);
+        let conn = loop {
+            tokio::select! {
+                conn = &mut accept_fut => {
+                    if let Some(c) = conn { break Some(c); }
+                    break connect_fut.await;
+                }
+                conn = &mut connect_fut => {
+                    if let Some(c) = conn { break Some(c); }
+                    break accept_fut.await;
+                }
+            }
         };
 
         if let Some(conn) = conn {
@@ -550,7 +570,7 @@ pub async fn connect_to_peer(
     let ep = transport.endpoint().await?;
     let deadline = Instant::now() + Duration::from_secs(30);
 
-    // Path 1: connect outbound (with up to 3 attempts).
+    // Path 1: connect outbound (with up to 3 attempts, each bounded).
     let connect_fut = {
         let ep = ep.clone();
         let addr = addr.clone();
@@ -559,8 +579,11 @@ pub async fn connect_to_peer(
                 if attempt > 0 {
                     tokio::time::sleep(Duration::from_secs(2)).await;
                 }
-                if let Ok(conn) = ep.connect(addr.clone(), ALPN).await {
-                    return Some(conn);
+                if Instant::now() >= deadline { break; }
+                match timeout(Duration::from_secs(8), ep.connect(addr.clone(), ALPN)).await {
+                    Ok(Ok(conn)) => return Some(conn),
+                    Ok(Err(e)) => eprintln!("[transport] outbound connect attempt {attempt}: {e}"),
+                    Err(_) => eprintln!("[transport] outbound connect attempt {attempt} timed out"),
                 }
             }
             None
@@ -586,9 +609,22 @@ pub async fn connect_to_peer(
         }
     };
 
-    let conn = tokio::select! {
-        conn = connect_fut => conn,
-        conn = accept_fut => conn,
+    // Race outbound connect vs inbound accept. If one path finishes with None, wait for the other.
+    let mut connect_fut = Box::pin(connect_fut);
+    let mut accept_fut = Box::pin(accept_fut);
+    let conn = loop {
+        tokio::select! {
+            conn = &mut connect_fut => {
+                if let Some(c) = conn { break Some(c); }
+                // All outbound attempts failed; keep waiting for an inbound connection.
+                break accept_fut.await;
+            }
+            conn = &mut accept_fut => {
+                if let Some(c) = conn { break Some(c); }
+                // Accept timed out; wait for outbound.
+                break connect_fut.await;
+            }
+        }
     };
 
     match conn {
