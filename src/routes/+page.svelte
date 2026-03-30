@@ -27,13 +27,13 @@
   let retryRoomId = $state<string | null>(null); // room to post joiner addr to on retry
 
 
-  async function cancelOnlineSession() {
+  async function cancelOnlineSession(clearError = true) {
     const roomId = hostedRoomId ?? retryRoomId;
     hostedRoomId = null;
     roomCode = "";
     onlineConnecting = false;
     retryRoomId = null;
-    onlineError = "";
+    if (clearError) onlineError = "";
     if (roomId) {
       await deleteRoom(roomId).catch(() => {});
     }
@@ -108,16 +108,21 @@
     invoke("stop_discovery").catch(() => {});
     try {
       // Use matchbox host_online command (creates WebRTC socket and registers room)
-      const code = await invoke("host_online") as string;
+      // Add timeout to prevent hanging if signaling server is unreachable
+      const code = await Promise.race([
+        invoke("host_online") as Promise<string>,
+        new Promise<string>((_, reject) => setTimeout(() => reject("Connection timeout - please try again"), 10000))
+      ]);
       roomCode = code;
       // No room ID needed for matchbox; keep dummy for compatibility
       hostedRoomId = 'dummy-' + code;
+      console.log('[Online Host] Room code received:', code);
       // The peer-connected event will be emitted when a peer joins
     } catch (e: any) {
+      console.error('[Online Host] Error:', e);
       onlineError = e?.toString() ?? "Failed to connect";
-      await cancelOnlineSession();
-    } finally {
       onlineConnecting = false;
+      await cancelOnlineSession(false); // Don't clear the error message
     }
   }
 

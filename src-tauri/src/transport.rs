@@ -56,7 +56,8 @@ impl WebRtcTransportState {
     /// Build room URL from signaling server and room code
     fn room_url(room_code: &str) -> Result<String, String> {
         let base = Self::signaling_server_url()?;
-        Ok(format!("{}/room/{}", base.trim_end_matches('/'), room_code))
+        // Room code goes directly in path without /room/ prefix
+        Ok(format!("{}/{}", base.trim_end_matches('/'), room_code))
     }
 }
 
