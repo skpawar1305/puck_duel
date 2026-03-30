@@ -372,27 +372,46 @@
         const myCol = isHost ? "#60a5fa" : "#34d399";
         const opCol = isHost ? "#34d399" : "#60a5fa";
 
+        // Score with glow and background pill
         const opSz = 72 + rs.score_flash[opIdx] * 28;
         ctx.font = `900 ${opSz}px system-ui`;
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
+        
+        // Background pill for opponent score
         if (rs.score_flash[opIdx] > 0) {
             ctx.shadowColor = opCol;
             ctx.shadowBlur = 28;
         }
-        ctx.fillStyle = `rgba(${isHost ? "52,211,153" : "96,165,250"},${0.45 + rs.score_flash[opIdx] * 0.55})`;
-        ctx.fillText(String(rs.score[opIdx]), 20, ch / 2 - 8);
+        const opText = String(rs.score[opIdx]);
+        const opW = ctx.measureText(opText).width;
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.beginPath();
+        ctx.roundRect(14, ch/2 - 8 - opSz - 8, opW + 24, opSz + 16, 12);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(${isHost ? "52,211,153" : "96,165,250"},${0.5 + rs.score_flash[opIdx] * 0.5})`;
+        ctx.fillText(opText, 20, ch / 2 - 8);
         ctx.shadowBlur = 0;
 
         const mySz = 72 + rs.score_flash[myIdx] * 28;
         ctx.font = `900 ${mySz}px system-ui`;
         ctx.textBaseline = "top";
+        
+        // Background pill for my score
         if (rs.score_flash[myIdx] > 0) {
             ctx.shadowColor = myCol;
             ctx.shadowBlur = 28;
         }
-        ctx.fillStyle = `rgba(${isHost ? "96,165,250" : "52,211,153"},${0.8 + rs.score_flash[myIdx] * 0.2})`;
-        ctx.fillText(String(rs.score[myIdx]), 20, ch / 2 + 8);
+        const myText = String(rs.score[myIdx]);
+        const myW = ctx.measureText(myText).width;
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.beginPath();
+        ctx.roundRect(14, ch/2 + 8 - 8, myW + 24, mySz + 16, 12);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(${isHost ? "96,165,250" : "52,211,153"},${0.85 + rs.score_flash[myIdx] * 0.15})`;
+        ctx.fillText(myText, 20, ch / 2 + 8);
         ctx.shadowBlur = 0;
 
         if (rs.countdown > 0) {
@@ -555,31 +574,35 @@
 
 <canvas
     bind:this={canvas}
-    class="touch-none block bg-[#060b14]"
+    class="touch-none block bg-gradient-to-b from-[#0a0e1a] via-[#060b14] to-[#0a0e1a]"
     style="width: 100vw; height: 100vh; position: fixed; top: 0; left: 0;"
 ></canvas>
 
 {#if gameOver}
-<div class="fixed inset-0 flex flex-col items-center justify-center z-10 bg-black/70 backdrop-blur-sm">
-    <div class="flex flex-col items-center gap-6 p-10 rounded-3xl bg-neutral-900/90 border border-neutral-700 shadow-2xl">
-        <div class="text-6xl">{iWon ? '🏆' : '😔'}</div>
-        <h2 class="text-4xl font-black {iWon ? 'text-yellow-400' : 'text-neutral-400'}">{iWon ? 'YOU WIN!' : 'YOU LOSE'}</h2>
-        <p class="text-3xl font-bold text-white tracking-widest">{rs.score[0]} – {rs.score[1]}</p>
-        <div class="flex gap-3 mt-2 w-full">
+<div class="fixed inset-0 flex flex-col items-center justify-center z-10 bg-black/80 backdrop-blur-md">
+    <div class="flex flex-col items-center gap-6 p-12 rounded-[2.5rem] bg-gradient-to-br from-neutral-900/95 to-neutral-800/90 border border-neutral-600/50 shadow-[0_0_60px_rgba(0,0,0,0.6)] animate-in fade-in zoom-in duration-300">
+        <div class="text-7xl {iWon ? 'animate-bounce' : 'animate-pulse'}">{iWon ? '🏆' : '😔'}</div>
+        <h2 class="text-5xl font-black {iWon ? 'text-yellow-400 drop-shadow-[0_0_24px_rgba(250,204,21,0.6)]' : 'text-neutral-400'}">{iWon ? 'VICTORY!' : 'DEFEAT'}</h2>
+        <div class="flex items-center gap-4 text-4xl font-black text-white tracking-widest bg-neutral-800/50 px-8 py-4 rounded-2xl border border-neutral-600/30">
+            <span class="{rs.score[0] > rs.score[1] ? 'text-yellow-400' : 'text-neutral-400'}">{rs.score[0]}</span>
+            <span class="text-neutral-600">–</span>
+            <span class="{rs.score[1] > rs.score[0] ? 'text-yellow-400' : 'text-neutral-400'}">{rs.score[1]}</span>
+        </div>
+        <div class="flex gap-3 mt-4 w-full">
             {#if isSinglePlayer}
-            <button class="flex-1 py-4 bg-emerald-600 text-white rounded-2xl text-lg font-bold hover:bg-emerald-500 uppercase tracking-widest" onclick={rematch}>▶ Play Again</button>
+            <button class="flex-1 py-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-2xl text-lg font-bold hover:from-emerald-500 hover:to-emerald-400 active:scale-95 uppercase tracking-widest shadow-[0_0_24px_rgba(16,185,129,0.4)] border border-emerald-400/30 transition-all" onclick={rematch}>🔄 Play Again</button>
             {/if}
-            <button class="flex-1 py-4 bg-neutral-700 text-white rounded-2xl text-lg font-bold hover:bg-neutral-600 uppercase tracking-widest" onclick={() => onBack?.()}>Menu</button>
+            <button class="flex-1 py-4 bg-gradient-to-r from-neutral-700 to-neutral-600 text-white rounded-2xl text-lg font-bold hover:from-neutral-600 hover:to-neutral-500 active:scale-95 uppercase tracking-widest shadow-lg border border-neutral-500/30 transition-all" onclick={() => onBack?.()}>🏠 Menu</button>
         </div>
     </div>
 </div>
 {:else}
 <button
-    class="fixed top-3 left-3 z-10 w-10 h-10 bg-black/40 text-white/60 rounded-full text-lg flex items-center justify-center active:scale-90 hover:text-white/90 hover:bg-black/60"
+    class="fixed top-4 left-4 z-10 w-11 h-11 bg-black/50 text-white/70 rounded-full text-xl flex items-center justify-center active:scale-90 hover:text-white hover:bg-black/70 backdrop-blur-sm border border-white/10 shadow-lg transition-all"
     onclick={() => { invoke('stop_game').catch(() => {}); onBack?.(); }}
 >✕</button>
 <button
-    class="fixed top-3 right-3 z-10 w-10 h-10 bg-black/40 text-white/60 rounded-full text-lg flex items-center justify-center active:scale-90 hover:text-white/90 hover:bg-black/60"
+    class="fixed top-4 right-4 z-10 w-11 h-11 bg-black/50 text-white/70 rounded-full text-xl flex items-center justify-center active:scale-90 hover:text-white hover:bg-black/70 backdrop-blur-sm border border-white/10 shadow-lg transition-all"
     onclick={() => muted = !muted}
 >{muted ? '🔇' : '🔊'}</button>
 {/if}
