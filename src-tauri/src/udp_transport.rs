@@ -208,7 +208,7 @@ pub async fn start_discovery(state: State<'_, UdpState>, app: AppHandle) -> Resu
                     if let Ok((len, src)) = result {
                         let ip_str = src.ip().to_string();
                         if ip_str == our_ip { continue; }
-                        if let Ok(s) = String::from_utf8(buf[..len].to_vec()) {
+                        if let Ok(_s) = String::from_utf8(buf[..len].to_vec()) {
                             let _ = app.emit("peer-found", ip_str);
                         }
                     }

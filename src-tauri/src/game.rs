@@ -545,9 +545,9 @@ pub async fn start_game(
     let paused   = engine.paused.clone();
     let pointer  = engine.pointer.clone();
 
-    // WebRTC socket and peer ID (clone the Arcs)
-    let webrtc_socket = transport.socket.clone();
-    let webrtc_peer_id = transport.peer_id.clone();
+    // WebRTC socket and peer ID (use getter methods)
+    let webrtc_socket = transport.get_socket();
+    let webrtc_peer_id = transport.get_peer_id();
 
     // clone pieces of the UDP state so we can move them into the async task
     let udp_socket = udp.socket.clone();
@@ -597,9 +597,9 @@ pub async fn start_game(
                         }
                     }
                 } else {
-                    let socket_guard = webrtc_socket.lock().await;
+                    let mut socket_guard = webrtc_socket.lock().await;
                     let peer_guard = webrtc_peer_id.lock().await;
-                    if let (Some(socket), Some(peer)) = (socket_guard.as_ref(), peer_guard.as_ref()) {
+                    if let (Some(socket), Some(peer)) = (socket_guard.as_mut(), peer_guard.as_ref()) {
                         if let Ok(channel) = socket.get_channel_mut(0) {
                             let packet = Packet::from(msg.into_bytes());
                             let _ = channel.send(packet, *peer);

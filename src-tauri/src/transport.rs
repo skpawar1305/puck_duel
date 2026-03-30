@@ -1,8 +1,8 @@
 use std::sync::Arc;
-use matchbox_socket::{WebRtcSocket, WebRtcSocketBuilder, PeerId, Packet};
+use matchbox_socket::{WebRtcSocket, PeerId, Packet, PeerState};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{broadcast, Mutex};
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
 use rand::Rng;
 
 /// Managed state for the WebRTC transport layer.
@@ -31,6 +31,16 @@ impl WebRtcTransportState {
         }
     }
 
+    /// Get a clone of the socket Arc
+    pub fn get_socket(&self) -> Arc<Mutex<Option<WebRtcSocket>>> {
+        self.socket.clone()
+    }
+
+    /// Get a clone of the peer_id Arc
+    pub fn get_peer_id(&self) -> Arc<Mutex<Option<PeerId>>> {
+        self.peer_id.clone()
+    }
+
     /// Get signaling server URL from environment variable
     fn signaling_server_url() -> Result<String, String> {
         std::env::var("MATCHBOX_SIGNALING_URL")
@@ -53,52 +63,57 @@ impl WebRtcTransportState {
 /// Returns a join handle that can be aborted to clean up both.
 fn spawn_socket_tasks(
     socket: Arc<Mutex<Option<WebRtcSocket>>>,
-    driver: impl std::future::Future<Output = ()> + Send + 'static,
+    driver: impl std::future::Future<Output = Result<(), matchbox_socket::Error>> + Send + 'static,
     msg_tx: broadcast::Sender<String>,
     peer_id: Arc<Mutex<Option<PeerId>>>,
     app: AppHandle,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let driver_handle = tokio::spawn(async move { driver.await; });
-        let event_handle = tokio::spawn({
+        let mut driver_handle = tokio::spawn(async move { let _ = driver.await; });
+        let mut event_handle = tokio::spawn({
             let socket = socket.clone();
             async move {
                 loop {
+                    // Small sleep to avoid busy-waiting
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+
                     let mut guard = socket.lock().await;
-                    if let Some(socket) = guard.as_mut() {
-                        match socket.next_event().await {
-                            Some(event) => {
-                                match event {
-                                    matchbox_socket::Event::Packet(packet) => {
-                                        if let Ok(msg) = String::from_utf8(packet) {
-                                            let _ = msg_tx.send(msg);
-                                        }
-                                    }
-                                    matchbox_socket::Event::PeerConnected(id) => {
-                                        *peer_id.lock().await = Some(id);
-                                        let _ = app.emit("peer-connected", ());
-                                    }
-                                    matchbox_socket::Event::PeerDisconnected(id) => {
-                                        if peer_id.lock().await.as_ref() == Some(&id) {
-                                            *peer_id.lock().await = None;
-                                            let _ = app.emit("peer-disconnected", ());
-                                        }
-                                    }
-                                    _ => {}
+                    let Some(socket) = guard.as_mut() else {
+                        break; // socket cleaned up
+                    };
+
+                    // Update peer state changes
+                    let peer_changes = socket.update_peers();
+                    for (id, state) in peer_changes {
+                        match state {
+                            PeerState::Connected => {
+                                *peer_id.lock().await = Some(id);
+                                let _ = app.emit("peer-connected", ());
+                            }
+                            PeerState::Disconnected => {
+                                if peer_id.lock().await.as_ref() == Some(&id) {
+                                    *peer_id.lock().await = None;
+                                    let _ = app.emit("peer-disconnected", ());
                                 }
                             }
-                            None => break,
                         }
-                    } else {
-                        break;
+                    }
+
+                    // Receive incoming messages
+                    if let Ok(channel) = socket.get_channel_mut(0) {
+                        for (_peer, packet) in channel.receive() {
+                            if let Ok(msg) = String::from_utf8(packet.to_vec()) {
+                                let _ = msg_tx.send(msg);
+                            }
+                        }
                     }
                 }
             }
         });
         // Wait for either task to finish, then abort the other.
         tokio::select! {
-            _ = driver_handle => { event_handle.abort(); }
-            _ = event_handle => { driver_handle.abort(); }
+            _ = &mut driver_handle => { event_handle.abort(); }
+            _ = &mut event_handle => { driver_handle.abort(); }
         }
     })
 }
@@ -117,11 +132,8 @@ pub async fn host_online(
     let code = WebRtcTransportState::generate_room_code();
     let room_url = WebRtcTransportState::room_url(&code)?;
 
-    // Create WebRTC socket
-    let (socket, message_loop) = WebRtcSocketBuilder::new(&room_url)
-        .build()
-        .await
-        .map_err(|e| format!("Failed to create WebRTC socket: {e}"))?;
+    // Create WebRTC socket with single unreliable channel
+    let (socket, message_loop) = WebRtcSocket::new_unreliable(&room_url);
 
     // Store socket and room ID
     *transport.socket.lock().await = Some(socket);
@@ -151,11 +163,8 @@ pub async fn join_online(
     let code = room_code.trim().to_uppercase();
     let room_url = WebRtcTransportState::room_url(&code)?;
 
-    // Create WebRTC socket
-    let (socket, message_loop) = WebRtcSocketBuilder::new(&room_url)
-        .build()
-        .await
-        .map_err(|e| format!("Failed to create WebRTC socket: {e}"))?;
+    // Create WebRTC socket with single unreliable channel
+    let (socket, message_loop) = WebRtcSocket::new_unreliable(&room_url);
 
     // Store socket and room ID
     *transport.socket.lock().await = Some(socket);
@@ -174,14 +183,14 @@ pub async fn join_online(
 /// Send a raw string message on the active WebRTC data channel.
 /// Returns `true` if the send succeeded.
 pub async fn send_msg(transport: &WebRtcTransportState, msg: String) -> bool {
-    let socket_guard = transport.socket.lock().await;
+    let mut socket_guard = transport.socket.lock().await;
     let peer_guard = transport.peer_id.lock().await;
-    if let (Some(socket), Some(peer)) = (socket_guard.as_ref(), peer_guard.as_ref()) {
+    if let (Some(socket), Some(peer)) = (socket_guard.as_mut(), peer_guard.as_ref()) {
         // Use channel 0 (unreliable datagram channel)
         match socket.get_channel_mut(0) {
             Ok(channel) => {
                 let packet = Packet::from(msg.into_bytes());
-                channel.send(packet, *peer).is_ok()
+                channel.try_send(packet, *peer).is_ok()
             }
             Err(_) => false,
         }
@@ -212,6 +221,6 @@ pub async fn cancel_online(transport: State<'_, WebRtcTransportState>) -> Result
 
 /// Get the current room ID (if any)
 #[tauri::command]
-pub async fn get_room_id(transport: State<'_, WebRtcTransportState>) -> Option<String> {
-    transport.room_id.lock().await.clone()
+pub async fn get_room_id(transport: State<'_, WebRtcTransportState>) -> Result<Option<String>, String> {
+    Ok(transport.room_id.lock().await.clone())
 }
