@@ -163,27 +163,26 @@ impl GameState {
             let puck_approach  = self.puck.vy < -30.0;
 
             let (spd, tgt_x, tgt_y): (f32, f32, f32) = if puck_behind {
-                // Puck slipped past AI paddle — chase directly
+                // Puck slipped past AI paddle — chase directly (but slower, so player can score)
                 let ty = (self.puck.y - 15.0).max(PAR);
-                (12.0, self.puck.x, ty)
-            } else if puck_in_half || puck_approach {
-                // Puck in AI half or approaching — intercept: position AI between puck and its own goal
-                // t: time until puck reaches AI's current Y (apy - puck.y and vy both negative when
-                // puck is below AI moving upward, so the division gives a correct positive value)
+                (9.0, self.puck.x, ty)
+            } else if puck_in_half && puck_approach {
+                // Puck in AI half and approaching — intercept with limited prediction
+                // Only predict a bit, and stay closer to home position for weaker defense
                 let t = if self.puck.vy.abs() > 10.0 {
-                    ((apy - self.puck.y) / self.puck.vy).clamp(0.0, 0.4)
+                    ((apy - self.puck.y) / self.puck.vy).clamp(0.0, 0.2)
                 } else { 0.0 };
                 let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
-                // Stay 50 px above (goal-side of) the puck so the paddle blocks the path
-                let ty = (self.puck.y - 50.0).clamp(PAR, TH / 2.0 - PAR / 2.0);
-                (8.0, pred_x, ty)
+                // Stay closer to defensive position, not directly in puck's path
+                let ty = (self.puck.y - 80.0).clamp(PAR, TH / 2.0 - PAR / 2.0);
+                (6.0, pred_x, ty)
             } else {
-                // Puck in host half — return to centred defensive home
+                // Puck in host half or not approaching — return to centred defensive home
                 (3.5, TW / 2.0, 110.0)
             };
 
             ai.x += (tgt_x - ai.x) * (spd * dt).min(1.0);
-            ai.y += (tgt_y - ai.y) * (spd * dt * 1.3).min(1.0);
+            ai.y += (tgt_y - ai.y) * (spd * dt).min(1.0);
             ai.x = ai.x.max(PAR).min(TW - PAR);
             ai.y = ai.y.max(PAR).min(TH/2.0 - PAR/2.0);
             ai.pvx = (ai.x - apx) / dt;
