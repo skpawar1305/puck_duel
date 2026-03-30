@@ -6,6 +6,7 @@ use tauri::State;
 use crate::transport::WebRtcTransportState;
 use crate::config::*;
 use crate::config::ai;
+use crate::config::interpolation;
 use crate::physics::{Puck, Paddle, collide_paddle_puck, collide_corner_puck, collide_goal_post};
 use matchbox_socket::Packet;
 use std::net::SocketAddr;
@@ -83,6 +84,9 @@ struct GameState {
     prev_recv_host_auth: bool,
     is_host:             bool,
     is_single:           bool,
+
+    // authority handoff smoothing
+    handoff_blend:       f32,
 }
 
 impl GameState {
@@ -100,6 +104,7 @@ impl GameState {
             prev_auth: is_single || is_host,
             prev_recv_host_auth: true,
             is_host, is_single,
+            handoff_blend: 0.0,
         }
     }
 
@@ -204,8 +209,9 @@ impl GameState {
         } else {
             let op = if self.is_host { &mut self.client_paddle } else { &mut self.host_paddle };
             let (opx, opy) = (op.x, op.y);
-            op.x += (self.target_opponent[0] - op.x) * 0.5;
-            op.y += (self.target_opponent[1] - op.y) * 0.5;
+            // Use config constant for opponent paddle interpolation
+            op.x += (self.target_opponent[0] - op.x) * interpolation::OPPONENT_PADDLE_LERP;
+            op.y += (self.target_opponent[1] - op.y) * interpolation::OPPONENT_PADDLE_LERP;
             op.pvx = (op.x - opx) / dt;
             op.pvy = (op.y - opy) / dt;
         }
@@ -214,12 +220,23 @@ impl GameState {
         let auth_now = self.auth();
 
         if auth_now && self.countdown == 0.0 {
-            // Just gained authority — snap to peer's last known puck state so
-            // both peers hand off from the same crossing point and velocity.
+            // Just gained authority — blend to peer's last known puck state smoothly
+            // over ~3 frames to avoid visible "teleport" at midfield
             if !self.prev_auth {
-                self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
-                self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
+                // Start handoff blend
+                self.handoff_blend = 0.0;
             }
+            
+            // Smooth handoff: blend over multiple frames
+            if self.handoff_blend < 1.0 {
+                self.handoff_blend += interpolation::HANDOFF_BLEND;
+                let blend = self.handoff_blend.min(1.0);
+                self.puck.x  = self.puck.x + (self.target_puck.x - self.puck.x) * blend;
+                self.puck.y  = self.puck.y + (self.target_puck.y - self.puck.y) * blend;
+                self.puck.vx = self.puck.vx + (self.target_puck.vx - self.puck.vx) * blend;
+                self.puck.vy = self.puck.vy + (self.target_puck.vy - self.puck.vy) * blend;
+            }
+            
             self.puck.x += self.puck.vx * dt;
             self.puck.y += self.puck.vy * dt;
 
@@ -317,23 +334,29 @@ impl GameState {
                 self.target_puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
             }
 
-            // Blend toward authoritative peer state
+            // Blend toward authoritative peer state with adaptive dead reckoning
             let ex = self.target_puck.x - self.puck.x;
             let ey = self.target_puck.y - self.puck.y;
             let err = (ex*ex + ey*ey).sqrt();
+
+            // Adaptive blend factor: smooth when close, snappy when diverged
+            let blend = (err / interpolation::ADAPTIVE_ERROR_THRESHOLD)
+                .clamp(interpolation::MIN_BLEND, interpolation::MAX_BLEND);
 
             // If peer already reset puck to center (after goal), snap immediately
             let peer_reset = (self.target_puck.x - TW/2.0).abs() < 10.0
                 && (self.target_puck.y - TH/2.0).abs() < 10.0
                 && self.target_puck.vx.abs() < 1.0
                 && self.target_puck.vy.abs() < 1.0;
-            if peer_reset || err > 120.0 {
+            if peer_reset || err > interpolation::DEAD_RECKONING_SNAP_THRESHOLD {
                 self.puck.x=self.target_puck.x; self.puck.y=self.target_puck.y;
                 self.puck.vx=self.target_puck.vx; self.puck.vy=self.target_puck.vy;
             } else if err > 1.0 {
-                self.puck.x += ex*0.28; self.puck.y += ey*0.28;
-                self.puck.vx += (self.target_puck.vx - self.puck.vx)*0.40;
-                self.puck.vy += (self.target_puck.vy - self.puck.vy)*0.40;
+                // Use adaptive blend for position, fixed blend for velocity
+                self.puck.x += ex * blend;
+                self.puck.y += ey * blend;
+                self.puck.vx += (self.target_puck.vx - self.puck.vx) * interpolation::PUCK_VELOCITY_LERP;
+                self.puck.vy += (self.target_puck.vy - self.puck.vy) * interpolation::PUCK_VELOCITY_LERP;
             }
         }
 
@@ -367,8 +390,7 @@ impl GameState {
     fn net_msg(&self) -> Option<String> {
         if self.is_single { return None; }
         // Always send puck + isHostAuth every packet.
-        // Receiver ignores puck data unless isHostAuth matches who should be sending.
-        // This eliminates the linger/missed-handoff problem entirely.
+        // Also send audio event flags so peer can play sounds.
         let is_host_auth = if self.is_host { self.prev_auth } else { !self.prev_auth };
         if self.is_host {
             Some(serde_json::json!({
@@ -379,6 +401,10 @@ impl GameState {
                 "score":      self.score,
                 "countdown":  self.countdown,
                 "isHostAuth": is_host_auth,
+                // Audio event flags
+                "hit":        self.hit,
+                "wall_hit":   self.wall_hit,
+                "goal_scored": self.goal_scored,
             }).to_string())
         } else {
             Some(serde_json::json!({
@@ -389,14 +415,18 @@ impl GameState {
                 "score":      self.score,
                 "countdown":  self.countdown,
                 "isHostAuth": is_host_auth,
+                // Audio event flags
+                "hit":        self.hit,
+                "wall_hit":   self.wall_hit,
+                "goal_scored": self.goal_scored,
             }).to_string())
         }
     }
 
     fn apply_net(&mut self, msg: &str) {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else { 
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else {
             log::error!("Failed to parse network message: {}", msg);
-            return; 
+            return;
         };
         // isHostAuth: true = host is currently authoritative
         let is_host_auth = v["isHostAuth"].as_bool().unwrap_or(true);
@@ -418,6 +448,11 @@ impl GameState {
         let recv_sum   = recv_score.map_or(0, |s| s[0] + s[1]);
         let local_sum  = self.score[0] + self.score[1];
         let fresh_round = recv_sum >= local_sum;
+
+        // Parse audio event flags from peer
+        let recv_hit = v["hit"].as_u64().map(|n| n as u8).unwrap_or(0);
+        let recv_wall_hit = v["wall_hit"].as_u64().map(|n| n as u8).unwrap_or(0);
+        let recv_goal_scored = v["goal_scored"].as_u64().map(|n| n as u8).unwrap_or(0);
 
         if self.is_host && v["type"] == "input" {
             if let Some(pos) = v["pos"].as_array() {
@@ -449,6 +484,10 @@ impl GameState {
                     if let Some(c) = v["countdown"].as_f64() { self.countdown = c as f32; }
                 }
             }
+            // Apply audio events from peer (always accept — they're one-frame events)
+            if recv_hit != 0 { self.hit = 1; }
+            if recv_wall_hit != 0 { self.wall_hit = 1; }
+            if recv_goal_scored != 0 { self.goal_scored = 1; }
         } else if !self.is_host && v["type"] == "state" {
             if let Some(hp) = v["hostPaddle"].as_array() {
                 self.target_opponent = [hp[0].as_f64().unwrap_or(0.0) as f32,
@@ -478,6 +517,10 @@ impl GameState {
                     if let Some(c) = v["countdown"].as_f64() { self.countdown = c as f32; }
                 }
             }
+            // Apply audio events from peer (always accept — they're one-frame events)
+            if recv_hit != 0 { self.hit = 1; }
+            if recv_wall_hit != 0 { self.wall_hit = 1; }
+            if recv_goal_scored != 0 { self.goal_scored = 1; }
         }
     }
 }

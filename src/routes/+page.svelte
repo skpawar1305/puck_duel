@@ -184,12 +184,24 @@
       if (screen !== "game") return;
       await invoke("reset_transport").catch(() => {});
       if (isHost) {
-        // Re-host with fresh endpoint so opponent can rejoin
-        await startOnlineHost();
+        // Re-host based on connection type
+        if (useUdp) {
+          // LAN mode: re-host with UDP
+          await startHost();
+        } else {
+          // Online mode: re-host with WebRTC
+          await startOnlineHost();
+        }
       } else {
-        onlineError = "Connection lost — tap Join (Online) to reconnect.";
-        onlineConnecting = false;
-        screen = "online_join";
+        // Client side: show appropriate rejoin screen
+        if (useUdp) {
+          lanError = "Connection lost — tap Host/Join to reconnect.";
+          screen = "menu";
+        } else {
+          onlineError = "Connection lost — tap Join (Online) to reconnect.";
+          onlineConnecting = false;
+          screen = "online_join";
+        }
       }
     });
 

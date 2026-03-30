@@ -5,6 +5,7 @@ use tokio::sync::{broadcast, Mutex};
 use tokio::time::Duration;
 use rand::Rng;
 use log::{info, warn, error};
+use crate::config::network;
 
 /// Managed state for the WebRTC transport layer.
 pub struct WebRtcTransportState {
@@ -88,8 +89,9 @@ fn spawn_socket_tasks(
             let socket = socket.clone();
             async move {
                 loop {
-                    // Small sleep to avoid busy-waiting
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    // Small sleep to avoid busy-waiting — keep this low to process
+                    // network packets every frame for smooth multiplayer
+                    tokio::time::sleep(Duration::from_millis(network::SOCKET_POLL_INTERVAL_MS)).await;
 
                     let mut guard = socket.lock().await;
                     let Some(socket) = guard.as_mut() else {

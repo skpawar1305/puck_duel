@@ -102,10 +102,42 @@ pub mod network {
     pub const MSG_CHANNEL_CAPACITY: usize = 64;
 
     /// Socket polling interval (milliseconds)
-    pub const SOCKET_POLL_INTERVAL_MS: u64 = 50;
+    /// Keep this low to process network packets every frame
+    pub const SOCKET_POLL_INTERVAL_MS: u64 = 8;
 
     /// Game loop target FPS
     pub const TARGET_FPS: u32 = 60;
+}
+
+/// Interpolation configuration for networked multiplayer
+pub mod interpolation {
+    /// Opponent paddle lerp factor (how quickly to interpolate opponent position)
+    /// Higher = snappier, lower = smoother but more lag
+    pub const OPPONENT_PADDLE_LERP: f32 = 0.75;
+
+    /// Base puck position lerp factor for dead reckoning
+    /// Adaptive blending will modify this based on error magnitude
+    pub const PUCK_POSITION_LERP: f32 = 0.50;
+
+    /// Base puck velocity lerp factor for dead reckoning
+    pub const PUCK_VELOCITY_LERP: f32 = 0.60;
+
+    /// Minimum blend factor for adaptive dead reckoning (smooth baseline)
+    pub const MIN_BLEND: f32 = 0.30;
+
+    /// Maximum blend factor for adaptive dead reckoning (snappy when diverged)
+    pub const MAX_BLEND: f32 = 0.80;
+
+    /// Error threshold for adaptive blending (pixels)
+    pub const ADAPTIVE_ERROR_THRESHOLD: f32 = 100.0;
+
+    /// Authority handoff blend factor (how quickly to blend on authority gain)
+    /// Blend over ~3 frames at 60Hz (1/0.35 ≈ 2.8 frames)
+    pub const HANDOFF_BLEND: f32 = 0.35;
+
+    /// Error threshold for instant snap (pixels)
+    /// Re-exported from parent for convenience
+    pub const DEAD_RECKONING_SNAP_THRESHOLD: f32 = super::DEAD_RECKONING_SNAP_THRESHOLD;
 }
 
 /// Audio cue thresholds
