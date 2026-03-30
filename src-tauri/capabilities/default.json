@@ -6,16 +6,6 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "google-admob:allow-initialize",
-    "google-admob:allow-show-banner",
-    "google-admob:allow-hide-banner",
-    "google-admob:allow-prepare-interstitial",
-    "google-admob:allow-show-interstitial",
-    "google-admob:allow-prepare-rewarded",
-    "google-admob:allow-show-rewarded",
-    "google-admob:allow-prepare-rewarded-interstitial",
-    "google-admob:allow-show-rewarded-interstitial",
-    "google-admob:allow-prepare-app-open",
-    "google-admob:allow-show-app-open"
+    "admob:default"
   ]
 }

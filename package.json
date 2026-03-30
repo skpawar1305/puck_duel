@@ -20,7 +20,7 @@
     "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4",
     "tailwindcss": "^4.2.0",
-    "tauri-plugin-google-admob": "^1.0.0"
+    "tauri-plugin-admob-api": "^0.0.4"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",

@@ -14,7 +14,7 @@ use udp_transport::{start_udp_host, connect_udp_client, host_send_msg, client_se
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_google_admob::GoogleAdmobPlugin::init())
+        .plugin(tauri_plugin_admob::init())
         .manage(WebRtcTransportState::new())
         .manage(GameEngine::new())
         .manage(UdpState::new())

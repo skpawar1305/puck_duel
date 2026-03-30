@@ -5,7 +5,7 @@
     import { playHit, playWall, playMyGoal, playOpponentGoal,
              playNearMiss, playCountdownTick, playCountdownGo,
              playWin, playLose, initAudio } from "$lib/audio";
-    import { prepareInterstitial, showInterstitial } from "tauri-plugin-google-admob";
+    import { InterstitialAd } from "tauri-plugin-admob-api";
 
     let {
         isHost,
@@ -23,24 +23,26 @@
 
     const AD_UNIT_ID = "ca-app-pub-7224112237798955/1828655479";
     // Preloaded interstitial — ready before game ends
-    let preloaded = false;
+    let preloadedAd: InstanceType<typeof InterstitialAd> | null = null;
 
     async function preloadAd() {
         try {
-            await prepareInterstitial({ ad_id: AD_UNIT_ID });
-            preloaded = true;
+            const ad = new InterstitialAd({ adUnitId: AD_UNIT_ID });
+            await ad.load();
+            preloadedAd = ad;
         } catch {
-            preloaded = false;
+            preloadedAd = null;
         }
     }
 
     async function showAd() {
-        if (!preloaded) return;
-        preloaded = false;
+        const ad = preloadedAd;
+        preloadedAd = null;
         // Start preloading the next one immediately
         preloadAd();
+        if (!ad) return;
         try {
-            await showInterstitial();
+            await ad.show();
         } catch {
             // Ad failure is non-fatal — game-over overlay always shows
         }
