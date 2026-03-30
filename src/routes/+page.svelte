@@ -6,7 +6,7 @@
   import { initAudio } from "$lib/audio";
   import QRCode from 'qrcode';
   import QRScanner from '$lib/components/QRScanner.svelte';
-  import { cleanupExpiredRooms, createRoom, deleteRoom, findRoomByCode, generateRoomCode, updateRoomJoinerAddr } from "$lib/pocketbase";
+  import { cleanupExpiredRooms, createRoom, deleteRoom, findRoomByCode, updateRoomJoinerAddr } from "$lib/matchbox";
 
   let screen = $state<"menu" | "host" | "join" | "game" | "online_host" | "online_join">("menu");
   let isHost = $state(false);
@@ -26,19 +26,6 @@
   let hostedRoomId = $state<string | null>(null);
   let retryRoomId = $state<string | null>(null); // room to post joiner addr to on retry
 
-  async function createRoomWithRetry(nodeAddrJson: string): Promise<{ code: string; roomId: string }> {
-    let lastError: unknown = null;
-    for (let i = 0; i < 8; i++) {
-      const code = generateRoomCode();
-      try {
-        const roomId = await createRoom(code, nodeAddrJson);
-        return { code, roomId };
-      } catch (e) {
-        lastError = e;
-      }
-    }
-    throw lastError ?? new Error("Failed to create room");
-  }
 
   async function cancelOnlineSession() {
     const roomId = hostedRoomId ?? retryRoomId;
@@ -120,15 +107,12 @@
     screen = "online_host";
     invoke("stop_discovery").catch(() => {});
     try {
-      await invoke("start_accept_loop");
-      const nodeAddrJson = (await invoke("get_our_node_addr")) as string;
-      await cleanupExpiredRooms().catch(() => {});
-      const created = await createRoomWithRetry(nodeAddrJson);
-      roomCode = created.code;
-      hostedRoomId = created.roomId;
-      // Tell the accept loop which room to poll for the joiner's address,
-      // enabling the host to connect outbound to the joiner if needed.
-      await invoke("set_hosted_room_id", { roomId: created.roomId });
+      // Use matchbox host_online command (creates WebRTC socket and registers room)
+      const code = await invoke("host_online") as string;
+      roomCode = code;
+      // No room ID needed for matchbox; keep dummy for compatibility
+      hostedRoomId = 'dummy-' + code;
+      // The peer-connected event will be emitted when a peer joins
     } catch (e: any) {
       onlineError = e?.toString() ?? "Failed to connect";
       await cancelOnlineSession();
@@ -153,44 +137,13 @@
     onlineConnecting = true;
     onlineError = "";
     retryRoomId = null;
-    let roomId: string | null = null;
     try {
-      const room = await findRoomByCode(joinCode.trim());
-      if (!room) {
-        throw new Error(`Room '${joinCode.trim()}' not found`);
-      }
-      roomId = room.id;
-      retryRoomId = room.id;
-
-      // Post our address immediately so host can connect to us if direct connection fails
-      const ourAddr = (await invoke("get_our_node_addr")) as string;
-      await updateRoomJoinerAddr(roomId, ourAddr).catch(() => {});
-
-      // First attempt: we connect outbound to the host.
-      await invoke("connect_to_peer", { nodeAddrJson: room.node_addr });
-      await deleteRoom(roomId).catch(() => {});
-      // peer-connected event fires from connect_to_peer → screen = "game"
-      roomId = null;
-      retryRoomId = null;
+      // Use matchbox join_online command with the room code
+      await invoke("join_online", { roomCode: joinCode.trim() });
+      // peer-connected event will be emitted when connection established
+      // No need to delete room (matchbox handles cleanup)
     } catch (e: any) {
-      if (roomId) {
-        // Direct connection failed, but host may be trying to connect to us
-        // Wait a bit to see if host connects
-        onlineError = "Direct connection failed, waiting for host to connect...";
-
-        // Try accept mode as fallback
-        try {
-          await invoke("accept_from_peer");
-          await deleteRoom(roomId).catch(() => {});
-          // Success - peer-connected event will fire
-          return;
-        } catch (acceptErr: any) {
-          // Both directions failed
-          onlineError = "sorry, we couldn't connect you two directly 🙏  try joining on the same wi-fi, or ask the host to retry hosting.";
-        }
-      } else {
-        onlineError = e?.toString() ?? "Failed to join";
-      }
+      onlineError = e?.toString() ?? "Failed to join";
       onlineConnecting = false;
     }
   }

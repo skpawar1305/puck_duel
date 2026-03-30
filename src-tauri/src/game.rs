@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::State;
-use crate::transport::TransportState;
+use crate::transport::WebRtcTransportState;
+use matchbox_socket::Packet;
 use std::net::SocketAddr;
 
 
@@ -518,7 +519,7 @@ impl GameState {
 #[tauri::command]
 pub async fn start_game(
     engine:           State<'_, GameEngine>,
-    transport:        State<'_, TransportState>,
+    transport:        State<'_, WebRtcTransportState>,
     udp:              State<'_, crate::udp_transport::UdpState>,
     is_host:          bool,
     is_single_player: bool,
@@ -544,8 +545,9 @@ pub async fn start_game(
     let paused   = engine.paused.clone();
     let pointer  = engine.pointer.clone();
 
-    // iroh connection handle (clone the Arc, not the option)
-    let connection = transport.connection.clone();
+    // WebRTC socket and peer ID (clone the Arcs)
+    let webrtc_socket = transport.socket.clone();
+    let webrtc_peer_id = transport.peer_id.clone();
 
     // clone pieces of the UDP state so we can move them into the async task
     let udp_socket = udp.socket.clone();
@@ -595,8 +597,13 @@ pub async fn start_game(
                         }
                     }
                 } else {
-                    if let Some(ref conn) = *connection.lock().await {
-                        let _ = conn.send_datagram(bytes::Bytes::from(msg.into_bytes()));
+                    let socket_guard = webrtc_socket.lock().await;
+                    let peer_guard = webrtc_peer_id.lock().await;
+                    if let (Some(socket), Some(peer)) = (socket_guard.as_ref(), peer_guard.as_ref()) {
+                        if let Ok(channel) = socket.get_channel_mut(0) {
+                            let packet = Packet::from(msg.into_bytes());
+                            let _ = channel.send(packet, *peer);
+                        }
                     }
                 }
             }
