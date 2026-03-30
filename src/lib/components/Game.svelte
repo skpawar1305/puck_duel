@@ -5,7 +5,7 @@
     import { playHit, playWall, playMyGoal, playOpponentGoal,
              playNearMiss, playCountdownTick, playCountdownGo,
              playWin, playLose, initAudio } from "$lib/audio";
-    import { InterstitialAd } from "tauri-plugin-admob-api";
+    import { prepareInterstitial, showInterstitial } from "tauri-plugin-google-admob";
 
     let {
         isHost,
@@ -23,26 +23,24 @@
 
     const AD_UNIT_ID = "ca-app-pub-7224112237798955/1828655479";
     // Preloaded interstitial — ready before game ends
-    let preloadedAd: InstanceType<typeof InterstitialAd> | null = null;
+    let preloaded = false;
 
     async function preloadAd() {
         try {
-            const ad = new InterstitialAd({ adUnitId: AD_UNIT_ID });
-            await ad.load();
-            preloadedAd = ad;
+            await prepareInterstitial({ ad_id: AD_UNIT_ID });
+            preloaded = true;
         } catch {
-            preloadedAd = null;
+            preloaded = false;
         }
     }
 
-    async function showInterstitial() {
-        const ad = preloadedAd;
-        preloadedAd = null;
+    async function showAd() {
+        if (!preloaded) return;
+        preloaded = false;
         // Start preloading the next one immediately
         preloadAd();
-        if (!ad) return;
         try {
-            await ad.show();
+            await showInterstitial();
         } catch {
             // Ad failure is non-fatal — game-over overlay always shows
         }
@@ -483,7 +481,7 @@
                 const myIdx = isHost ? 0 : 1;
                 iWon = state.score[myIdx] >= WINNING_SCORE;
                 invoke("stop_game").catch(() => {});
-                showInterstitial();
+                showAd();
             }
         };
         await invoke("start_game", { isHost, isSinglePlayer, channel: ch, useUdp });
@@ -544,7 +542,7 @@
                 const myIdx = isHost ? 0 : 1;
                 iWon = state.score[myIdx] >= WINNING_SCORE;
                 invoke("stop_game").catch(() => {});
-                showInterstitial();
+                showAd();
             }
         };
 
