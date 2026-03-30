@@ -169,7 +169,7 @@ impl GameState {
             } else if puck_in_half && puck_approach {
                 // Puck in AI half and approaching — intercept with limited prediction
                 // Only predict a bit, and stay closer to home position for weaker defense
-                let t = if self.puck.vy.abs() > 10.0 {
+                let t = if self.puck.vy < -10.0 {
                     ((apy - self.puck.y) / self.puck.vy).clamp(0.0, 0.2)
                 } else { 0.0 };
                 let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
@@ -181,10 +181,15 @@ impl GameState {
                 (3.5, TW / 2.0, 110.0)
             };
 
-            ai.x += (tgt_x - ai.x) * (spd * dt).min(1.0);
-            ai.y += (tgt_y - ai.y) * (spd * dt).min(1.0);
+            // Smooth lerp toward target — avoid division by dt for velocity
+            let lerp_x = (spd * dt).min(1.0);
+            let lerp_y = (spd * dt).min(1.0);
+            ai.x = ai.x + (tgt_x - ai.x) * lerp_x;
+            ai.y = ai.y + (tgt_y - ai.y) * lerp_y;
+            // Clamp to table bounds
             ai.x = ai.x.max(PAR).min(TW - PAR);
             ai.y = ai.y.max(PAR).min(TH/2.0 - PAR/2.0);
+            // Velocity for physics collisions
             ai.pvx = (ai.x - apx) / dt;
             ai.pvy = (ai.y - apy) / dt;
         } else {
@@ -517,7 +522,8 @@ pub async fn start_game(
     let handle = tokio::spawn(async move {
         let mut gs       = GameState::new(is_host, is_single_player);
         let mut interval = tokio::time::interval(Duration::from_nanos(16_666_667));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // Skip missed ticks to prevent spiral of death — keeps game smooth even if scheduler delays
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut last     = Instant::now();
 
         while running.load(Ordering::Relaxed) {
