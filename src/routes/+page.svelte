@@ -105,24 +105,25 @@
     onlineConnecting = true;
     hostedRoomId = null;
     screen = "online_host";
-    invoke("stop_discovery").catch(() => {});
+    
     try {
+      await invoke("stop_discovery").catch(() => {});
+      console.log('[Online Host] Calling host_online...');
+      
       // Use matchbox host_online command (creates WebRTC socket and registers room)
-      // Add timeout to prevent hanging if signaling server is unreachable
-      const code = await Promise.race([
-        invoke("host_online") as Promise<string>,
-        new Promise<string>((_, reject) => setTimeout(() => reject("Connection timeout - please try again"), 10000))
-      ]);
-      roomCode = code;
-      // No room ID needed for matchbox; keep dummy for compatibility
+      const code = await invoke("host_online");
+      console.log('[Online Host] Response received:', code);
+      
+      roomCode = String(code);
       hostedRoomId = 'dummy-' + code;
-      console.log('[Online Host] Room code received:', code);
-      // The peer-connected event will be emitted when a peer joins
+      onlineConnecting = false;
+      console.log('[Online Host] State updated, roomCode:', roomCode);
     } catch (e: any) {
       console.error('[Online Host] Error:', e);
       onlineError = e?.toString() ?? "Failed to connect";
       onlineConnecting = false;
-      await cancelOnlineSession(false); // Don't clear the error message
+      hostedRoomId = null;
+      roomCode = "";
     }
   }
 

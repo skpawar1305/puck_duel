@@ -5,6 +5,7 @@ use tauri::ipc::Channel;
 use tauri::State;
 use crate::transport::WebRtcTransportState;
 use crate::config::*;
+use crate::config::ai;
 use crate::physics::{Puck, Paddle, collide_paddle_puck, collide_corner_puck, collide_goal_post};
 use matchbox_socket::Packet;
 use std::net::SocketAddr;
@@ -161,34 +162,42 @@ impl GameState {
             let puck_behind    = self.puck.y < apy;
             let puck_in_half   = self.puck.y < TH / 2.0;
             let puck_approach  = self.puck.vy < -30.0;
+            let puck_coming_fast = self.puck.vy < -80.0;
 
             let (spd, tgt_x, tgt_y): (f32, f32, f32) = if puck_behind {
                 // Puck slipped past AI paddle — chase directly (but slower, so player can score)
                 let ty = (self.puck.y - 15.0).max(PAR);
-                (9.0, self.puck.x, ty)
+                (ai::CHASE_SPEED, self.puck.x, ty)
             } else if puck_in_half && puck_approach {
-                // Puck in AI half and approaching — intercept with limited prediction
-                // Only predict a bit, and stay closer to home position for weaker defense
+                // Puck in AI half and approaching — intercept with prediction
                 let t = if self.puck.vy < -10.0 {
-                    ((apy - self.puck.y) / self.puck.vy).clamp(0.0, 0.2)
+                    ((apy - self.puck.y) / self.puck.vy.abs()).clamp(0.0, ai::PREDICTION_TIME)
                 } else { 0.0 };
                 let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
-                // Stay closer to defensive position, not directly in puck's path
-                let ty = (self.puck.y - 80.0).clamp(PAR, TH / 2.0 - PAR / 2.0);
-                (6.0, pred_x, ty)
+                
+                // If puck coming fast, be more defensive; otherwise intercept aggressively
+                let ty = if puck_coming_fast {
+                    // Defensive: stay closer to goal, react to puck X
+                    (self.puck.y - 60.0).clamp(ai::DEFENSIVE_Y, TH / 2.0 - PAR / 2.0)
+                } else {
+                    // Aggressive: move up to intercept
+                    (self.puck.y - ai::BLOCK_DISTANCE).clamp(PAR, TH / 2.0 - PAR / 2.0)
+                };
+                (ai::INTERCEPT_SPEED, pred_x, ty)
             } else {
-                // Puck in host half or not approaching — return to centred defensive home
-                (3.5, TW / 2.0, 110.0)
+                // Puck in host half or not approaching — return to centered defensive home
+                (ai::RETURN_SPEED, TW / 2.0, ai::HOME_Y)
             };
 
-            // Smooth lerp toward target — avoid division by dt for velocity
-            let lerp_x = (spd * dt).min(1.0);
-            let lerp_y = (spd * dt).min(1.0);
-            ai.x = ai.x + (tgt_x - ai.x) * lerp_x;
-            ai.y = ai.y + (tgt_y - ai.y) * lerp_y;
+            // Smooth lerp toward target with AI reaction simulation
+            let lerp = ai::REACTION_LERP;
+            ai.x = ai.x + (tgt_x - ai.x) * lerp;
+            ai.y = ai.y + (tgt_y - ai.y) * lerp;
+            
             // Clamp to table bounds
             ai.x = ai.x.max(PAR).min(TW - PAR);
             ai.y = ai.y.max(PAR).min(TH/2.0 - PAR/2.0);
+            
             // Velocity for physics collisions
             ai.pvx = (ai.x - apx) / dt;
             ai.pvy = (ai.y - apy) / dt;

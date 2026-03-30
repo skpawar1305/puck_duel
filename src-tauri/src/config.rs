@@ -24,14 +24,20 @@ pub const GOAL_WIDTH: f32 = 110.0;
 pub const CORNER_RADIUS: f32 = 42.0;
 
 /// Maximum puck speed (prevents tunneling through walls)
-pub const MAX_SPEED: f32 = 990.0;
+pub const MAX_SPEED: f32 = 1100.0;
+
+/// Minimum puck speed after paddle hit (ensures satisfying shots)
+pub const MIN_HIT_SPEED: f32 = 180.0;
+
+/// Paddle hit power multiplier (how much paddle velocity transfers to puck)
+pub const PADDLE_POWER: f32 = 1.4;
 
 /// Wall restitution coefficient (1.0 = perfectly elastic, 0.0 = no bounce)
-pub const WALL_REST: f32 = 0.88;
+pub const WALL_REST: f32 = 0.92;
 
 /// Friction coefficient applied to puck velocity each frame
 /// Higher = more friction = puck slows faster
-pub const FRICTION: f32 = 0.22;
+pub const FRICTION: f32 = 0.15;
 
 /// Authority hysteresis band around midline (pixels)
 /// Prevents rapid authority flipping when puck is near center
@@ -66,19 +72,28 @@ pub const NEAR_MISS_COOLDOWN_MS: u64 = 2000;
 /// AI difficulty settings
 pub mod ai {
     /// Chase speed when puck is behind AI (pixels/frame)
-    pub const CHASE_SPEED: f32 = 12.0;
+    pub const CHASE_SPEED: f32 = 11.0;
 
     /// Intercept speed when puck is approaching
-    pub const INTERCEPT_SPEED: f32 = 8.0;
+    pub const INTERCEPT_SPEED: f32 = 9.5;
 
     /// Return-to-center speed when puck is in opponent's half
-    pub const RETURN_SPEED: f32 = 3.5;
+    pub const RETURN_SPEED: f32 = 4.0;
 
     /// How far in front of puck AI positions itself (pixels)
-    pub const BLOCK_DISTANCE: f32 = 50.0;
+    pub const BLOCK_DISTANCE: f32 = 45.0;
 
     /// Home position Y when returning to center
-    pub const HOME_Y: f32 = 110.0;
+    pub const HOME_Y: f32 = 100.0;
+
+    /// AI reaction lerp factor (higher = faster reaction)
+    pub const REACTION_LERP: f32 = 0.35;
+
+    /// AI prediction time for intercepting (seconds)
+    pub const PREDICTION_TIME: f32 = 0.15;
+
+    /// AI defensive position when puck is far
+    pub const DEFENSIVE_Y: f32 = 90.0;
 }
 
 /// Network configuration

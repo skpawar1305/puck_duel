@@ -42,13 +42,18 @@ impl WebRtcTransportState {
         self.peer_id.clone()
     }
 
+    /// Get a reference to the msg_tx channel
+    pub fn get_msg_tx(&self) -> &broadcast::Sender<String> {
+        &self.msg_tx
+    }
+
     /// Get signaling server URL from environment variable with default fallback
     fn signaling_server_url() -> Result<String, String> {
-        // Use environment variable if set, otherwise use default public server
-        match std::env::var("MATCHBOX_SIGNALING_URL") {
-            Ok(url) => Ok(url),
-            Err(_) => Ok("wss://puckduel.dano.win".to_string()),
-        }
+        // Use compile-time environment variable if set, otherwise use default public server
+        // This is set via build.rs which loads src-tauri/.env at compile time
+        Ok(option_env!("MATCHBOX_SIGNALING_URL")
+            .unwrap_or("wss://puckduel.dano.win")
+            .to_string())
     }
 
     /// Generate a random 4-digit room code
@@ -145,25 +150,45 @@ pub async fn host_online(
     let code = WebRtcTransportState::generate_room_code();
     let room_url = WebRtcTransportState::room_url(&code)?;
 
-    info!("Hosting online game with room code: {}", code);
+    eprintln!("🌍 [host_online] Starting with room code: {}", code);
+    eprintln!("🌍 [host_online] Room URL: {}", room_url);
 
     // Create WebRTC socket with single unreliable channel
+    eprintln!("🌍 [host_online] Creating WebRTC socket...");
     let (socket, message_loop) = WebRtcSocket::new_unreliable(&room_url);
+    eprintln!("🌍 [host_online] WebRTC socket created successfully");
 
-    // Store socket and room ID
-    *transport.socket.lock().await = Some(socket);
-    *transport.room_id.lock().await = Some(code.clone());
+    // Prepare data for spawning tasks
+    let msg_tx = transport.msg_tx.clone();
+    let peer_id = transport.peer_id.clone();
+    
+    // Store socket and room ID (drop the guard immediately after)
+    eprintln!("🌍 [host_online] Storing socket in state...");
+    {
+        let mut socket_guard = transport.socket.lock().await;
+        *socket_guard = Some(socket);
+        drop(socket_guard);
+    }
+    {
+        let mut room_id_guard = transport.room_id.lock().await;
+        *room_id_guard = Some(code.clone());
+        drop(room_id_guard);
+    }
+    eprintln!("🌍 [host_online] Socket stored");
 
     // Spawn combined driver and event loop tasks
     let socket_arc = transport.socket.clone();
-    let msg_tx = transport.msg_tx.clone();
-    let peer_id = transport.peer_id.clone();
+    eprintln!("🌍 [host_online] Spawning socket tasks...");
     let handle = spawn_socket_tasks(socket_arc, message_loop, msg_tx, peer_id, app);
-    *transport.bg_task.lock().await = Some(handle);
+    
+    {
+        let mut bg_task_guard = transport.bg_task.lock().await;
+        *bg_task_guard = Some(handle);
+        drop(bg_task_guard);
+    }
+    eprintln!("🌍 [host_online] Socket tasks spawned");
 
-    // Spawn additional task to wait for peer connection (optional)
-    // The message loop will emit peer-connected event
-
+    eprintln!("🌍 [host_online] Returning room code to frontend");
     Ok(code)
 }
 
