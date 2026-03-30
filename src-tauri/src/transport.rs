@@ -42,10 +42,13 @@ impl WebRtcTransportState {
         self.peer_id.clone()
     }
 
-    /// Get signaling server URL from environment variable
+    /// Get signaling server URL from environment variable with default fallback
     fn signaling_server_url() -> Result<String, String> {
-        std::env::var("MATCHBOX_SIGNALING_URL")
-            .map_err(|_| "MATCHBOX_SIGNALING_URL environment variable not set".to_string())
+        // Use environment variable if set, otherwise use default public server
+        match std::env::var("MATCHBOX_SIGNALING_URL") {
+            Ok(url) => Ok(url),
+            Err(_) => Ok("wss://puckduel.dano.win".to_string()),
+        }
     }
 
     /// Generate a random 4-digit room code
