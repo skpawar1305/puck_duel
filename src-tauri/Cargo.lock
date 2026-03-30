@@ -4879,6 +4879,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "hex",
+ "log",
  "matchbox_socket",
  "mdns-sd",
  "rand 0.8.5",

@@ -1,3 +1,5 @@
+mod config;
+mod physics;
 mod transport;
 mod game;
 mod udp_transport;

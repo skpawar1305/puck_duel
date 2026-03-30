@@ -4,21 +4,19 @@ use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::State;
 use crate::transport::WebRtcTransportState;
+use crate::config::*;
+use crate::physics::{Puck, Paddle, collide_paddle_puck, collide_corner_puck, collide_goal_post};
 use matchbox_socket::Packet;
 use std::net::SocketAddr;
 
-
-const TW: f32 = 360.0;
-const TH: f32 = 640.0;
-const PR: f32 = 20.0;
-const PAR: f32 = 27.0;
-const GOAL_W: f32 = 110.0;
+// Convenience aliases using config constants
+const TW: f32 = TABLE_WIDTH;
+const TH: f32 = TABLE_HEIGHT;
+const PR: f32 = PUCK_RADIUS;
+const PAR: f32 = PADDLE_RADIUS;
+const GOAL_W: f32 = GOAL_WIDTH;
 const GX: f32 = (TW - GOAL_W) / 2.0;
-const CR: f32 = 42.0;
-const AUTH_HYSTERESIS: f32 = 12.0;
-const MAX_SPEED: f32 = 990.0;
-const WALL_REST: f32 = 0.88;
-const FRICTION: f32 = 0.22;
+const CR: f32 = CORNER_RADIUS;
 
 // ── Public state managed by Tauri ─────────────────────────────────────────────
 pub struct GameEngine {
@@ -55,52 +53,6 @@ pub struct RenderState {
     pub wall_hit:      u8,   // 1 = wall hit this frame
     pub goal_scored:   u8,   // 1 = goal this frame
     pub countdown:     f32,  // >0 = pre-game countdown
-}
-
-// ── Internal physics structs ──────────────────────────────────────────────────
-#[derive(Clone)]
-struct Puck  { x: f32, y: f32, vx: f32, vy: f32 }
-#[derive(Clone)]
-struct Paddle{ x: f32, y: f32, pvx: f32, pvy: f32 }
-
-// ── Physics helpers ───────────────────────────────────────────────────────────
-fn collide_paddle_puck(puck: &mut Puck, pad: &Paddle) -> bool {
-    let dx = puck.x - pad.x;
-    let dy = puck.y - pad.y;
-    let d  = (dx*dx + dy*dy).sqrt();
-    let md = PR + PAR;
-    if d >= md || d < 0.001 { return false; }
-    let (nx, ny) = (dx/d, dy/d);
-    puck.x = pad.x + nx * (md + 1.0);
-    puck.y = pad.y + ny * (md + 1.0);
-    let dot = (puck.vx - pad.pvx)*nx + (puck.vy - pad.pvy)*ny;
-    if dot < 0.0 { puck.vx -= 2.0*dot*nx; puck.vy -= 2.0*dot*ny; true } else { false }
-}
-
-fn collide_corner_puck(puck: &mut Puck, cx: f32, cy: f32, in_zone: bool) -> bool {
-    if !in_zone { return false; }
-    let dx = puck.x - cx;
-    let dy = puck.y - cy;
-    let d  = (dx*dx + dy*dy).sqrt();
-    let max_d = (CR - 2.0) - PR;
-    if d <= max_d || d < 0.001 { return false; }
-    let (nx, ny) = (dx/d, dy/d);
-    puck.x = cx + nx * max_d;
-    puck.y = cy + ny * max_d;
-    let dot = puck.vx*nx + puck.vy*ny;
-    if dot > 0.0 { puck.vx -= dot*(1.0+WALL_REST)*nx; puck.vy -= dot*(1.0+WALL_REST)*ny; true } else { false }
-}
-
-fn collide_goal_post(puck: &mut Puck, px: f32, py: f32) -> bool {
-    let dx = puck.x - px;
-    let dy = puck.y - py;
-    let d  = (dx*dx + dy*dy).sqrt();
-    if d >= PR || d < 0.001 { return false; }
-    let (nx, ny) = (dx/d, dy/d);
-    puck.x = px + nx * PR;
-    puck.y = py + ny * PR;
-    let dot = puck.vx*nx + puck.vy*ny;
-    if dot < 0.0 { puck.vx -= (1.0+WALL_REST)*dot*nx; puck.vy -= (1.0+WALL_REST)*dot*ny; true } else { false }
 }
 
 // ── Game state ────────────────────────────────────────────────────────────────
@@ -429,7 +381,10 @@ impl GameState {
     }
 
     fn apply_net(&mut self, msg: &str) {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else { return };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else { 
+            log::error!("Failed to parse network message: {}", msg);
+            return; 
+        };
         // isHostAuth: true = host is currently authoritative
         let is_host_auth = v["isHostAuth"].as_bool().unwrap_or(true);
         // Detect authority transitions — on a handoff, always accept puck data even
@@ -644,4 +599,174 @@ pub fn resume_game(engine: State<'_, GameEngine>) {
 #[tauri::command]
 pub fn set_pointer(engine: State<'_, GameEngine>, x: f32, y: f32) {
     *engine.pointer.lock().unwrap() = [x, y];
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn create_test_gamestate(is_host: bool, is_single: bool) -> GameState {
+        GameState::new(is_host, is_single)
+    }
+
+    #[test]
+    fn test_host_net_msg_format() {
+        let mut gs = create_test_gamestate(true, false);
+        let msg = gs.net_msg().expect("Should produce a message");
+        
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["type"], "state");
+        assert!(v["hostPaddle"].is_array());
+        assert!(v["puck"].is_array());
+        assert!(v["vel"].is_array());
+        assert!(v["score"].is_array());
+        assert!(v["isHostAuth"].is_boolean());
+    }
+
+    #[test]
+    fn test_client_net_msg_format() {
+        let mut gs = create_test_gamestate(false, false);
+        let msg = gs.net_msg().expect("Should produce a message");
+        
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["type"], "input");
+        assert!(v["pos"].is_array());
+        assert!(v["puck"].is_array());
+        assert!(v["vel"].is_array());
+        assert!(v["score"].is_array());
+        assert!(v["isHostAuth"].is_boolean());
+    }
+
+    #[test]
+    fn test_single_player_no_net_msg() {
+        let gs = create_test_gamestate(true, true);
+        assert!(gs.net_msg().is_none());
+    }
+
+    #[test]
+    fn test_apply_net_parses_host_state() {
+        let mut gs = create_test_gamestate(false, false); // client
+        let msg = json!({
+            "type": "state",
+            "hostPaddle": [100.0, 200.0],
+            "puck": [50.0, 60.0],
+            "vel": [10.0, -5.0],
+            "score": [1, 0],
+            "countdown": 2.0,
+            "isHostAuth": true
+        }).to_string();
+        
+        gs.apply_net(&msg);
+        
+        assert_eq!(gs.target_opponent[0], 100.0);
+        assert_eq!(gs.target_opponent[1], 200.0);
+        assert_eq!(gs.score[0], 1);
+        assert_eq!(gs.countdown, 2.0);
+    }
+
+    #[test]
+    fn test_apply_net_parses_client_input() {
+        let mut gs = create_test_gamestate(true, false); // host
+        let msg = json!({
+            "type": "input",
+            "pos": [150.0, 100.0],
+            "puck": [50.0, 60.0],
+            "vel": [10.0, -5.0],
+            "score": [0, 1],
+            "countdown": 1.5,
+            "isHostAuth": true
+        }).to_string();
+        
+        gs.apply_net(&msg);
+        
+        assert_eq!(gs.target_opponent[0], 150.0);
+        assert_eq!(gs.target_opponent[1], 100.0);
+        assert_eq!(gs.score[1], 1);
+        assert_eq!(gs.countdown, 1.5);
+    }
+
+    #[test]
+    fn test_apply_net_rejects_malformed_json() {
+        let mut gs = create_test_gamestate(true, false);
+        let initial_score = gs.score;
+        
+        gs.apply_net("not valid json");
+        
+        // Score should be unchanged (silent failure with log)
+        assert_eq!(gs.score, initial_score);
+    }
+
+    #[test]
+    fn test_apply_net_score_max_applies() {
+        let mut gs = create_test_gamestate(true, false);
+        gs.score = [2, 1]; // Local score
+        
+        // Remote has higher score for client
+        let msg = json!({
+            "type": "input",
+            "pos": [100.0, 100.0],
+            "score": [1, 3],
+            "isHostAuth": true
+        }).to_string();
+        
+        gs.apply_net(&msg);
+        
+        // Should take max: [2, 3]
+        assert_eq!(gs.score[0], 2);
+        assert_eq!(gs.score[1], 3);
+    }
+
+    #[test]
+    fn test_stale_packet_guard() {
+        let mut gs = create_test_gamestate(false, false);
+        gs.score = [1, 0]; // Local already scored
+        
+        // Stale packet from before goal (score sum 0 < 1)
+        let stale_msg = json!({
+            "type": "state",
+            "hostPaddle": [100.0, 200.0],
+            "puck": [50.0, 60.0],
+            "vel": [10.0, -5.0],
+            "score": [0, 0],
+            "countdown": 0.0,
+            "isHostAuth": false
+        }).to_string();
+        
+        gs.countdown = 2.5; // Post-goal countdown
+        gs.apply_net(&stale_msg);
+        
+        // Countdown should NOT be overwritten by stale packet
+        assert_eq!(gs.countdown, 2.5);
+    }
+
+    #[test]
+    fn test_authority_detection() {
+        let mut gs_host = create_test_gamestate(true, false);
+        let mut gs_client = create_test_gamestate(false, false);
+        
+        // Puck in host half - host should be authoritative
+        gs_host.puck.y = TH - 100.0;
+        gs_client.puck.y = TH - 100.0;
+        
+        assert!(gs_host.auth());
+        assert!(!gs_client.auth());
+        
+        // Puck in client half - client should be authoritative
+        gs_host.puck.y = 100.0;
+        gs_client.puck.y = 100.0;
+        
+        assert!(!gs_host.auth());
+        assert!(gs_client.auth());
+    }
+
+    #[test]
+    fn test_single_player_always_authoritative() {
+        let mut gs = create_test_gamestate(true, true);
+        gs.puck.y = 100.0;
+        assert!(gs.auth());
+        
+        gs.puck.y = TH - 100.0;
+        assert!(gs.auth());
+    }
 }

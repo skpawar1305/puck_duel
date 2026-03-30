@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{broadcast, Mutex};
 use tokio::time::Duration;
 use rand::Rng;
+use log::{info, warn, error};
 
 /// Managed state for the WebRTC transport layer.
 pub struct WebRtcTransportState {
@@ -69,7 +70,11 @@ fn spawn_socket_tasks(
     app: AppHandle,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let mut driver_handle = tokio::spawn(async move { let _ = driver.await; });
+        let mut driver_handle = tokio::spawn(async move { 
+            if let Err(e) = driver.await {
+                error!("WebRTC socket driver error: {:?}", e);
+            }
+        });
         let mut event_handle = tokio::spawn({
             let socket = socket.clone();
             async move {
@@ -88,11 +93,13 @@ fn spawn_socket_tasks(
                         match state {
                             PeerState::Connected => {
                                 *peer_id.lock().await = Some(id);
+                                info!("Peer connected: {:?}", id);
                                 let _ = app.emit("peer-connected", ());
                             }
                             PeerState::Disconnected => {
                                 if peer_id.lock().await.as_ref() == Some(&id) {
                                     *peer_id.lock().await = None;
+                                    warn!("Peer disconnected: {:?}", id);
                                     let _ = app.emit("peer-disconnected", ());
                                 }
                             }
@@ -104,6 +111,8 @@ fn spawn_socket_tasks(
                         for (_peer, packet) in channel.receive() {
                             if let Ok(msg) = String::from_utf8(packet.to_vec()) {
                                 let _ = msg_tx.send(msg);
+                            } else {
+                                warn!("Received invalid UTF-8 network packet");
                             }
                         }
                     }
@@ -131,6 +140,8 @@ pub async fn host_online(
     // Generate room code
     let code = WebRtcTransportState::generate_room_code();
     let room_url = WebRtcTransportState::room_url(&code)?;
+
+    info!("Hosting online game with room code: {}", code);
 
     // Create WebRTC socket with single unreliable channel
     let (socket, message_loop) = WebRtcSocket::new_unreliable(&room_url);
@@ -163,6 +174,8 @@ pub async fn join_online(
     let code = room_code.trim().to_uppercase();
     let room_url = WebRtcTransportState::room_url(&code)?;
 
+    info!("Joining online game with room code: {}", code);
+
     // Create WebRTC socket with single unreliable channel
     let (socket, message_loop) = WebRtcSocket::new_unreliable(&room_url);
 
@@ -190,11 +203,20 @@ pub async fn send_msg(transport: &WebRtcTransportState, msg: String) -> bool {
         match socket.get_channel_mut(0) {
             Ok(channel) => {
                 let packet = Packet::from(msg.into_bytes());
-                channel.try_send(packet, *peer).is_ok()
+                if let Err(e) = channel.try_send(packet, *peer) {
+                    warn!("Failed to send network message: {:?}", e);
+                    false
+                } else {
+                    true
+                }
             }
-            Err(_) => false,
+            Err(e) => {
+                warn!("Failed to get network channel: {:?}", e);
+                false
+            }
         }
     } else {
+        warn!("Cannot send: socket or peer not available");
         false
     }
 }
