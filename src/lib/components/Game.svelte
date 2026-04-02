@@ -102,6 +102,54 @@
         lastPuckY = TH / 2;
     let lastTime = 0;
 
+    // ── Static layer (bg gradient + grid + center circle) ────────────────────
+    // Built once at init; never changes regardless of screen size because it's
+    // drawn in table-space (360×640) and the main canvas transform handles scaling.
+    let staticLayer: OffscreenCanvas | null = null;
+
+    function buildStaticLayer() {
+        staticLayer = new OffscreenCanvas(TW, TH);
+        const s = staticLayer.getContext("2d")!;
+
+        const bg = s.createLinearGradient(0, 0, 0, TH);
+        bg.addColorStop(0, "#091220");
+        bg.addColorStop(0.5, "#0d1b33");
+        bg.addColorStop(1, "#091220");
+        s.fillStyle = bg;
+        s.fillRect(0, 0, TW, TH);
+
+        // All grid lines in a single path — one stroke call instead of 28
+        s.strokeStyle = "rgba(59,130,246,0.09)";
+        s.lineWidth = 0.8;
+        s.beginPath();
+        for (let x = 0; x <= TW; x += 36) { s.moveTo(x, 0); s.lineTo(x, TH); }
+        for (let y = 0; y <= TH; y += 36) { s.moveTo(0, y); s.lineTo(TW, y); }
+        s.stroke();
+
+        s.strokeStyle = "rgba(244,63,94,0.22)";
+        s.lineWidth = 2;
+        s.beginPath();
+        s.arc(TW / 2, TH / 2, 55, 0, Math.PI * 2);
+        s.stroke();
+    }
+
+    // ── Score text-width cache (measureText is slow; scores only go 0–WINNING_SCORE) ──
+    const scoreWidths = new Map<string, number>();
+
+    function getScoreWidth(ctx: CanvasRenderingContext2D, text: string, sz: number): number {
+        if (sz === 72) {
+            if (!scoreWidths.has(text)) {
+                const prev = ctx.font;
+                ctx.font = "900 72px system-ui";
+                scoreWidths.set(text, ctx.measureText(text).width);
+                ctx.font = prev;
+            }
+            return scoreWidths.get(text)!;
+        }
+        ctx.font = `900 ${sz}px system-ui`;
+        return ctx.measureText(text).width;
+    }
+
     // ── Audio tracking ────────────────────────────────────────────────────────
     let prevScore: [number, number] = [0, 0];
     let prevNumLit = -1;
@@ -230,53 +278,28 @@
     }
 
     function drawTable(ctx: CanvasRenderingContext2D) {
-        const bg = ctx.createLinearGradient(0, 0, 0, TH);
-        bg.addColorStop(0, "#091220");
-        bg.addColorStop(0.5, "#0d1b33");
-        bg.addColorStop(1, "#091220");
-        ctx.fillStyle = bg;
-        ctx.fillRect(0, 0, TW, TH);
-
-        ctx.strokeStyle = "rgba(59,130,246,0.09)";
-        ctx.lineWidth = 0.8;
-        for (let x = 0; x <= TW; x += 36) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, TH);
-            ctx.stroke();
-        }
-        for (let y = 0; y <= TH; y += 36) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(TW, y);
-            ctx.stroke();
-        }
-
-        ctx.strokeStyle = "rgba(244,63,94,0.22)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(TW / 2, TH / 2, 55, 0, Math.PI * 2);
-        ctx.stroke();
+        // Blit pre-rendered static layer (bg gradient + grid + center circle)
+        ctx.drawImage(staticLayer!, 0, 0);
 
         const wf = rs.wall_flash;
+
+        // Midline — dynamic colour/shadow driven by wall_flash
         ctx.strokeStyle = `rgba(244,63,94,${0.35 + wf * 0.65})`;
         ctx.lineWidth = 2.5;
-        ctx.shadowColor = `rgba(244,63,94,${wf * 0.9})`;
-        ctx.shadowBlur = wf * 14;
+        if (wf > 0.01) { ctx.shadowColor = `rgba(244,63,94,${wf * 0.9})`; ctx.shadowBlur = wf * 14; }
         ctx.setLineDash([14, 8]);
         ctx.beginPath();
         ctx.moveTo(0, TH / 2);
         ctx.lineTo(TW, TH / 2);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.shadowBlur = 0;
+        if (wf > 0.01) ctx.shadowBlur = 0;
 
+        // Border path
         const RC = CR - 2;
-        ctx.shadowColor = `rgba(96,165,250,${wf})`;
-        ctx.shadowBlur = wf * 18;
+        if (wf > 0.01) { ctx.shadowColor = `rgba(96,165,250,${wf})`; ctx.shadowBlur = wf * 18; }
         ctx.strokeStyle = `rgba(148,163,184,${0.55 + wf * 0.45})`;
         ctx.lineWidth = 3.5;
-
         ctx.beginPath();
         ctx.moveTo(CR, 2);
         ctx.lineTo(GX, 2);
@@ -292,28 +315,27 @@
         ctx.lineTo(2, CR);
         ctx.arc(CR, CR, RC, Math.PI, Math.PI * 1.5);
         ctx.stroke();
-        ctx.shadowBlur = 0;
+        if (wf > 0.01) ctx.shadowBlur = 0;
 
+        // Goals — batched into one path per side
         const wg = wf * 0.4;
-        const line = (x1: number, y1: number, x2: number, y2: number) => {
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-        };
         ctx.fillStyle = `rgba(16,185,129,${0.13 + wg})`;
         ctx.fillRect(GX, 0, GOAL_W, 14);
         ctx.strokeStyle = `rgba(16,185,129,${0.7 + wg})`;
         ctx.lineWidth = 2.5;
-        line(GX, 0, GX, 14);
-        line(GX + GOAL_W, 0, GX + GOAL_W, 14);
+        ctx.beginPath();
+        ctx.moveTo(GX, 0); ctx.lineTo(GX, 14);
+        ctx.moveTo(GX + GOAL_W, 0); ctx.lineTo(GX + GOAL_W, 14);
+        ctx.stroke();
 
         ctx.fillStyle = `rgba(59,130,246,${0.13 + wg})`;
         ctx.fillRect(GX, TH - 14, GOAL_W, 14);
         ctx.strokeStyle = `rgba(59,130,246,${0.7 + wg})`;
         ctx.lineWidth = 2.5;
-        line(GX, TH, GX, TH - 14);
-        line(GX + GOAL_W, TH, GX + GOAL_W, TH - 14);
+        ctx.beginPath();
+        ctx.moveTo(GX, TH); ctx.lineTo(GX, TH - 14);
+        ctx.moveTo(GX + GOAL_W, TH); ctx.lineTo(GX + GOAL_W, TH - 14);
+        ctx.stroke();
     }
 
     function drawTrail(ctx: CanvasRenderingContext2D) {
@@ -331,8 +353,8 @@
     function drawPuck(ctx: CanvasRenderingContext2D) {
         const [px, py] = rs.puck;
         const sg = Math.min(rs.puck_speed / MAX_SPEED, 1);
-        ctx.shadowColor = `rgba(254,220,50,${0.6 + sg * 0.4})`;
-        ctx.shadowBlur = 12 + sg * 28;
+        ctx.shadowColor = `rgba(254,220,50,${0.5 + sg * 0.5})`;
+        ctx.shadowBlur = 8 + sg * 16;  // was 12 + sg*28; max 24 vs 40
         const g = ctx.createRadialGradient(px - 6, py - 6, 2, px, py, PR);
         g.addColorStop(0, "#fff8c2");
         g.addColorStop(0.5, "#fde047");
@@ -352,7 +374,7 @@
     ) {
         const [x, y] = pos;
         ctx.shadowColor = col;
-        ctx.shadowBlur = 18;
+        ctx.shadowBlur = 12;  // was 18
         const g = ctx.createRadialGradient(x - 10, y - 10, 4, x, y, PAR);
         g.addColorStop(0, light);
         g.addColorStop(1, col);
@@ -374,42 +396,42 @@
 
         // Score with glow and background pill
         const opSz = 72 + rs.score_flash[opIdx] * 28;
-        ctx.font = `900 ${opSz}px system-ui`;
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
-        
+
         // Background pill for opponent score
         if (rs.score_flash[opIdx] > 0) {
             ctx.shadowColor = opCol;
             ctx.shadowBlur = 28;
         }
         const opText = String(rs.score[opIdx]);
-        const opW = ctx.measureText(opText).width;
+        const opW = getScoreWidth(ctx, opText, opSz);
+        ctx.font = `900 ${opSz}px system-ui`;
         ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.beginPath();
         ctx.roundRect(14, ch/2 - 8 - opSz - 8, opW + 24, opSz + 16, 12);
         ctx.fill();
-        
+
         ctx.fillStyle = `rgba(${isHost ? "52,211,153" : "96,165,250"},${0.5 + rs.score_flash[opIdx] * 0.5})`;
         ctx.fillText(opText, 20, ch / 2 - 8);
         ctx.shadowBlur = 0;
 
         const mySz = 72 + rs.score_flash[myIdx] * 28;
-        ctx.font = `900 ${mySz}px system-ui`;
         ctx.textBaseline = "top";
-        
+
         // Background pill for my score
         if (rs.score_flash[myIdx] > 0) {
             ctx.shadowColor = myCol;
             ctx.shadowBlur = 28;
         }
         const myText = String(rs.score[myIdx]);
-        const myW = ctx.measureText(myText).width;
+        const myW = getScoreWidth(ctx, myText, mySz);
+        ctx.font = `900 ${mySz}px system-ui`;
         ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.beginPath();
         ctx.roundRect(14, ch/2 + 8 - 8, myW + 24, mySz + 16, 12);
         ctx.fill();
-        
+
         ctx.fillStyle = `rgba(${isHost ? "96,165,250" : "52,211,153"},${0.85 + rs.score_flash[myIdx] * 0.15})`;
         ctx.fillText(myText, 20, ch / 2 + 8);
         ctx.shadowBlur = 0;
@@ -516,6 +538,7 @@
     // ── Mount ─────────────────────────────────────────────────────────────────
     onMount(async () => {
         preloadAd(); // start loading while the game initialises
+        buildStaticLayer(); // pre-render bg+grid+circle once
         const dpr = window.devicePixelRatio || 1;
         resizeFn = () => {
             canvas.width = window.innerWidth * dpr;
