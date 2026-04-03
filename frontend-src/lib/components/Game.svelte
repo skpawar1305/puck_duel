@@ -95,12 +95,18 @@
 
     // Pending pointer position — flushed to Rust once per rAF frame
     let pendingPtr: [number, number] | null = null;
+    // Local paddle position — updated immediately on pointer move (client-side prediction)
+    let localPaddlePos: [number, number] | null = null;
 
     // Trail maintained locally (JS side) from puck position updates
     let trail: { x: number; y: number; age: number }[] = [];
     let lastPuckX = TW / 2,
         lastPuckY = TH / 2;
     let lastTime = 0;
+
+    // ── Cached canvas context & transform (set once; transform updated on resize) ──
+    let ctx: CanvasRenderingContext2D | null = null;
+    let scale = 1, ox = 0, oy = 0;
 
     // ── Static layer (bg gradient + grid + center circle) ────────────────────
     // Built once at init; never changes regardless of screen size because it's
@@ -131,6 +137,82 @@
         s.beginPath();
         s.arc(TW / 2, TH / 2, 55, 0, Math.PI * 2);
         s.stroke();
+    }
+
+    // ── Pre-rendered sprites (eliminate per-frame shadowBlur + createRadialGradient) ──
+    const PAD_SPRITE_SIZE = (PAR + 22) * 2;   // paddle radius + glow margin, square
+    const PUCK_SPRITE_SIZE = (PR  +  4) * 2;   // puck radius + tiny padding
+    const PUCK_GLOW_SIZE   = (PR  + 28) * 2;   // puck glow extends up to 28px
+
+    let paddleBlueSprite:  OffscreenCanvas | null = null;
+    let paddleGreenSprite: OffscreenCanvas | null = null;
+    let puckBodySprite:    OffscreenCanvas | null = null;
+    let puckGlowSprite:    OffscreenCanvas | null = null;
+
+    function hexToRgba(hex: string, a: number): string {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r},${g},${b},${a})`;
+    }
+
+    function buildPaddleSprite(col: string, light: string): OffscreenCanvas {
+        const size = PAD_SPRITE_SIZE;
+        const oc = new OffscreenCanvas(size, size);
+        const s = oc.getContext("2d")!;
+        const cx = size / 2, cy = size / 2;
+        // Glow halo (replaces shadowBlur=12)
+        const glowGrad = s.createRadialGradient(cx, cy, PAR, cx, cy, size / 2);
+        glowGrad.addColorStop(0, hexToRgba(col, 0.55));
+        glowGrad.addColorStop(1, hexToRgba(col, 0));
+        s.fillStyle = glowGrad;
+        s.beginPath();
+        s.arc(cx, cy, size / 2, 0, Math.PI * 2);
+        s.fill();
+        // Paddle body
+        const g = s.createRadialGradient(cx - 10, cy - 10, 4, cx, cy, PAR);
+        g.addColorStop(0, light);
+        g.addColorStop(1, col);
+        s.beginPath();
+        s.arc(cx, cy, PAR, 0, Math.PI * 2);
+        s.fillStyle = g;
+        s.fill();
+        s.strokeStyle = "rgba(255,255,255,0.28)";
+        s.lineWidth = 2;
+        s.stroke();
+        return oc;
+    }
+
+    function buildPuckSprite(): OffscreenCanvas {
+        const size = PUCK_SPRITE_SIZE;
+        const oc = new OffscreenCanvas(size, size);
+        const s = oc.getContext("2d")!;
+        const cx = size / 2, cy = size / 2;
+        const g = s.createRadialGradient(cx - 6, cy - 6, 2, cx, cy, PR);
+        g.addColorStop(0, "#fff8c2");
+        g.addColorStop(0.5, "#fde047");
+        g.addColorStop(1, "#b45309");
+        s.beginPath();
+        s.arc(cx, cy, PR, 0, Math.PI * 2);
+        s.fillStyle = g;
+        s.fill();
+        return oc;
+    }
+
+    function buildPuckGlowSprite(): OffscreenCanvas {
+        const size = PUCK_GLOW_SIZE;
+        const oc = new OffscreenCanvas(size, size);
+        const s = oc.getContext("2d")!;
+        const cx = size / 2;
+        const grad = s.createRadialGradient(cx, cx, PR * 0.5, cx, cx, size / 2);
+        grad.addColorStop(0,   "rgba(254,220,50,1)");
+        grad.addColorStop(0.4, "rgba(254,220,50,0.4)");
+        grad.addColorStop(1,   "rgba(254,220,50,0)");
+        s.fillStyle = grad;
+        s.beginPath();
+        s.arc(cx, cx, size / 2, 0, Math.PI * 2);
+        s.fill();
+        return oc;
     }
 
     // ── Score text-width cache (measureText is slow; scores only go 0–WINNING_SCORE) ──
@@ -220,8 +302,6 @@
     // ── Draw ──────────────────────────────────────────────────────────────────
     function draw(ts: number) {
         rafId = requestAnimationFrame(draw);
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
         // Flush buffered pointer position — one IPC call per frame instead of per event
@@ -245,11 +325,7 @@
         for (const t of trail) t.age += dt;
         trail = trail.filter((t) => t.age < 0.1).slice(0, 6);
 
-        const cw = canvas.width,
-            ch = canvas.height;
-        const scale = Math.min(cw / TW, ch / TH) * 0.92;
-        const ox = (cw - TW * scale) / 2,
-            oy = (ch - TH * scale) / 2;
+        const cw = canvas.width, ch = canvas.height;
 
         ctx.clearRect(0, 0, cw, ch);
         ctx.fillStyle = "#060b14";
@@ -266,8 +342,10 @@
         drawTable(ctx);
         drawTrail(ctx);
         drawPuck(ctx);
-        drawPaddle(ctx, rs.host_paddle, "#3b82f6", "#93c5fd");
-        drawPaddle(ctx, rs.client_paddle, "#10b981", "#6ee7b7");
+        const myPos  = localPaddlePos ?? (isHost ? rs.host_paddle : rs.client_paddle);
+        const oppPos = isHost ? rs.client_paddle : rs.host_paddle;
+        blitPaddle(ctx, isHost ? myPos  : oppPos,  paddleBlueSprite!);
+        blitPaddle(ctx, isHost ? oppPos : myPos,   paddleGreenSprite!);
 
         if (rs.goal_flash > 0) {
             ctx.fillStyle = `rgba(255,255,255,${rs.goal_flash * 0.25})`;
@@ -353,39 +431,19 @@
     function drawPuck(ctx: CanvasRenderingContext2D) {
         const [px, py] = rs.puck;
         const sg = Math.min(rs.puck_speed / MAX_SPEED, 1);
-        ctx.shadowColor = `rgba(254,220,50,${0.5 + sg * 0.5})`;
-        ctx.shadowBlur = 8 + sg * 16;  // was 12 + sg*28; max 24 vs 40
-        const g = ctx.createRadialGradient(px - 6, py - 6, 2, px, py, PR);
-        g.addColorStop(0, "#fff8c2");
-        g.addColorStop(0.5, "#fde047");
-        g.addColorStop(1, "#b45309");
-        ctx.beginPath();
-        ctx.arc(px, py, PR, 0, Math.PI * 2);
-        ctx.fillStyle = g;
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        // Glow sprite (alpha scales with speed)
+        const glowHalf = PUCK_GLOW_SIZE / 2;
+        ctx.globalAlpha = 0.5 + sg * 0.5;
+        ctx.drawImage(puckGlowSprite!, px - glowHalf, py - glowHalf);
+        ctx.globalAlpha = 1;
+        // Body sprite
+        const bodyHalf = PUCK_SPRITE_SIZE / 2;
+        ctx.drawImage(puckBodySprite!, px - bodyHalf, py - bodyHalf);
     }
 
-    function drawPaddle(
-        ctx: CanvasRenderingContext2D,
-        pos: [number, number],
-        col: string,
-        light: string,
-    ) {
-        const [x, y] = pos;
-        ctx.shadowColor = col;
-        ctx.shadowBlur = 12;  // was 18
-        const g = ctx.createRadialGradient(x - 10, y - 10, 4, x, y, PAR);
-        g.addColorStop(0, light);
-        g.addColorStop(1, col);
-        ctx.beginPath();
-        ctx.arc(x, y, PAR, 0, Math.PI * 2);
-        ctx.fillStyle = g;
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.28)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+    function blitPaddle(ctx: CanvasRenderingContext2D, pos: [number, number], sprite: OffscreenCanvas) {
+        const half = PAD_SPRITE_SIZE / 2;
+        ctx.drawImage(sprite, pos[0] - half, pos[1] - half);
     }
 
     function drawHUD(ctx: CanvasRenderingContext2D, cw: number, ch: number) {
@@ -514,11 +572,6 @@
     // ── Input → Rust ──────────────────────────────────────────────────────────
     function tableCoords(cx: number, cy: number): [number, number] {
         const dpr = window.devicePixelRatio || 1;
-        const cw = canvas.width,
-            ch = canvas.height;
-        const scale = Math.min(cw / TW, ch / TH) * 0.92;
-        const ox = (cw - TW * scale) / 2,
-            oy = (ch - TH * scale) / 2;
         let x = (cx * dpr - ox) / scale,
             y = (cy * dpr - oy) / scale;
         if (!isHost && !isSinglePlayer) {
@@ -531,22 +584,31 @@
     function onPointerMove(e: PointerEvent) {
         e.preventDefault();
         const [x, y] = tableCoords(e.clientX, e.clientY);
-        // Buffer position — flushed to Rust once per rAF frame in draw()
-        pendingPtr = [x, y];
+        pendingPtr     = [x, y]; // flushed to Rust once per rAF frame
+        localPaddlePos = [x, y]; // rendered immediately (client-side prediction)
     }
 
     // ── Mount ─────────────────────────────────────────────────────────────────
     onMount(async () => {
         preloadAd(); // start loading while the game initialises
         buildStaticLayer(); // pre-render bg+grid+circle once
-        const dpr = window.devicePixelRatio || 1;
+        paddleBlueSprite  = buildPaddleSprite("#3b82f6", "#93c5fd");
+        paddleGreenSprite = buildPaddleSprite("#10b981", "#6ee7b7");
+        puckBodySprite    = buildPuckSprite();
+        puckGlowSprite    = buildPuckGlowSprite();
         resizeFn = () => {
-            canvas.width = window.innerWidth * dpr;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width  = window.innerWidth  * dpr;
             canvas.height = window.innerHeight * dpr;
-            canvas.style.width = window.innerWidth + "px";
+            canvas.style.width  = window.innerWidth  + "px";
             canvas.style.height = window.innerHeight + "px";
+            const cw = canvas.width, ch = canvas.height;
+            scale = Math.min(cw / TW, ch / TH) * 0.92;
+            ox = (cw - TW * scale) / 2;
+            oy = (ch - TH * scale) / 2;
         };
         resizeFn();
+        ctx = canvas.getContext("2d");
         window.addEventListener("resize", resizeFn);
         canvas.addEventListener("pointermove", onPointerMove, { passive: false });
         canvas.addEventListener("pointerdown", onPointerMove, { passive: false });
