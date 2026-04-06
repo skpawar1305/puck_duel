@@ -65,6 +65,20 @@
     const MAX_SPEED = 990;
     const GX = (TW - GOAL_W) / 2;
 
+    const COL = {
+        bgTop: "#030814",
+        bgMid: "#0a1830",
+        bgBottom: "#040916",
+        lane: "rgba(168,222,255,0.14)",
+        stripe: "rgba(170,208,240,0.12)",
+        borderCore: 0xe2eefc,
+        borderAccent: 0xc4f1e0,
+        blue: 0x6eaeea,
+        green: 0x56d8b0,
+        puck: 0xf6c668,
+        champagne: 0xf2dfb1,
+    } as const;
+
     interface RS {
         puck: [number, number];
         puck_speed: number;
@@ -277,11 +291,11 @@
             cy = size / 2;
 
         const g = s.createRadialGradient(cx - 5, cy - 5, 2, cx, cy, PR);
-        g.addColorStop(0, "#fffbe8");
-        g.addColorStop(0.25, "#fef08a");
-        g.addColorStop(0.55, "#f59e0b");
-        g.addColorStop(0.78, "#c2410c");
-        g.addColorStop(1, "#451a03");
+        g.addColorStop(0, "#fff9ea");
+        g.addColorStop(0.24, "#f7dfa7");
+        g.addColorStop(0.56, "#e0a74b");
+        g.addColorStop(0.8, "#9c5f1e");
+        g.addColorStop(1, "#2f1a07");
         s.beginPath();
         s.arc(cx, cy, PR, 0, Math.PI * 2);
         s.fillStyle = g;
@@ -289,8 +303,8 @@
 
         const ring = s.createRadialGradient(cx, cy, PR * 0.3, cx, cy, PR);
         ring.addColorStop(0, "rgba(255,255,255,0)");
-        ring.addColorStop(0.82, "rgba(255,228,130,0)");
-        ring.addColorStop(1, "rgba(255,228,130,0.75)");
+        ring.addColorStop(0.82, "rgba(248,223,169,0)");
+        ring.addColorStop(1, "rgba(248,223,169,0.72)");
         s.fillStyle = ring;
         s.beginPath();
         s.arc(cx, cy, PR, 0, Math.PI * 2);
@@ -301,7 +315,7 @@
         s.arc(cx - 6, cy - 6, PR * 0.2, 0, Math.PI * 2);
         s.fill();
 
-        s.strokeStyle = "rgba(255,240,180,0.8)";
+        s.strokeStyle = "rgba(249,227,182,0.84)";
         s.lineWidth = 1.3;
         s.beginPath();
         s.arc(cx, cy, PR - 1.1, 0, Math.PI * 2);
@@ -332,7 +346,7 @@
             const x1 = Math.cos(a) * (PR * 0.62);
             const y1 = Math.sin(a) * (PR * 0.62);
 
-            s.strokeStyle = "rgba(255,210,120,0.9)";
+            s.strokeStyle = "rgba(246,198,104,0.9)";
             s.lineWidth = 1.7;
             s.beginPath();
             s.moveTo(x0, y0);
@@ -351,7 +365,7 @@
         // High-contrast split arcs: clearly visible even on small mobile screens.
         s.lineCap = "round";
         s.lineWidth = 3.2;
-        s.strokeStyle = "rgba(255,255,255,0.78)";
+        s.strokeStyle = "rgba(255,252,242,0.82)";
         s.beginPath();
         s.arc(cx, cy, PR * 0.84, -Math.PI * 0.06, Math.PI * 0.44);
         s.stroke();
@@ -368,7 +382,7 @@
         s.stroke();
 
         // Center emblem avoids the "single-color blob" look.
-        s.fillStyle = "rgba(255,252,230,0.95)";
+        s.fillStyle = "rgba(255,247,224,0.95)";
         s.beginPath();
         s.arc(cx, cy, PR * 0.16, 0, Math.PI * 2);
         s.fill();
@@ -392,10 +406,10 @@
         const cx = size / 2;
 
         const grad = s.createRadialGradient(cx, cx, PR * 0.35, cx, cx, size / 2);
-        grad.addColorStop(0, "rgba(255,245,158,0.92)");
-        grad.addColorStop(0.3, "rgba(254,220,50,0.72)");
-        grad.addColorStop(0.56, "rgba(249,115,22,0.34)");
-        grad.addColorStop(1, "rgba(254,220,50,0)");
+        grad.addColorStop(0, "rgba(255,241,186,0.9)");
+        grad.addColorStop(0.32, "rgba(245,195,92,0.66)");
+        grad.addColorStop(0.6, "rgba(194,120,44,0.3)");
+        grad.addColorStop(1, "rgba(245,195,92,0)");
         s.fillStyle = grad;
         s.beginPath();
         s.arc(cx, cx, size / 2, 0, Math.PI * 2);
@@ -478,22 +492,22 @@
         const [c, s] = makeCanvas(TW, TH);
 
         const bg = s.createLinearGradient(0, 0, 0, TH);
-        bg.addColorStop(0, "#02060f");
-        bg.addColorStop(0.48, "#081126");
-        bg.addColorStop(1, "#02060f");
+        bg.addColorStop(0, COL.bgTop);
+        bg.addColorStop(0.5, COL.bgMid);
+        bg.addColorStop(1, COL.bgBottom);
         s.fillStyle = bg;
         s.fillRect(0, 0, TW, TH);
 
         // Ice slab gradient inside the board area.
         const ice = s.createLinearGradient(0, 8, 0, TH - 8);
-        ice.addColorStop(0, "rgba(198,226,255,0.08)");
-        ice.addColorStop(0.5, "rgba(125,170,220,0.12)");
-        ice.addColorStop(1, "rgba(198,226,255,0.08)");
+        ice.addColorStop(0, "rgba(214,235,255,0.08)");
+        ice.addColorStop(0.5, "rgba(140,185,227,0.12)");
+        ice.addColorStop(1, "rgba(214,235,255,0.08)");
         s.fillStyle = ice;
         s.fillRect(6, 6, TW - 12, TH - 12);
 
         // Longitudinal lane marks.
-        s.strokeStyle = "rgba(148,200,255,0.16)";
+        s.strokeStyle = COL.lane;
         s.lineWidth = 1.4;
         s.beginPath();
         s.moveTo(30, 20);
@@ -503,7 +517,7 @@
         s.stroke();
 
         // Cross-rink stripes.
-        s.strokeStyle = "rgba(148,200,255,0.14)";
+        s.strokeStyle = COL.stripe;
         s.lineWidth = 1;
         for (let y = 36; y < TH; y += 44) {
             s.beginPath();
@@ -513,24 +527,24 @@
         }
 
         // Faceoff rings and center marks.
-        s.strokeStyle = "rgba(244,63,94,0.42)";
+        s.strokeStyle = "rgba(242,223,177,0.44)";
         s.lineWidth = 2;
         s.beginPath();
         s.arc(TW / 2, TH / 2, 52, 0, Math.PI * 2);
         s.stroke();
 
-        s.strokeStyle = "rgba(52,211,153,0.34)";
+        s.strokeStyle = "rgba(125,221,190,0.34)";
         s.beginPath();
         s.arc(TW / 2, 116, 32, 0, Math.PI * 2);
         s.arc(TW / 2, TH - 116, 32, 0, Math.PI * 2);
         s.stroke();
 
-        s.fillStyle = "rgba(244,63,94,0.62)";
+        s.fillStyle = "rgba(242,223,177,0.62)";
         s.beginPath();
         s.arc(TW / 2, TH / 2, 4, 0, Math.PI * 2);
         s.fill();
 
-        s.fillStyle = "rgba(52,211,153,0.6)";
+        s.fillStyle = "rgba(125,221,190,0.58)";
         s.beginPath();
         s.arc(TW / 2, 116, 3, 0, Math.PI * 2);
         s.arc(TW / 2, TH - 116, 3, 0, Math.PI * 2);
@@ -676,7 +690,7 @@
         g.clear();
         const idle = 0.06 + (Math.sin(performance.now() * 0.004) + 1) * 0.025;
         addBorderPath(g);
-        g.stroke({ width: 6 + wf * 9, color: 0x7dd3fc, alpha: idle + wf * 0.28 });
+        g.stroke({ width: 6 + wf * 9, color: COL.champagne, alpha: idle + wf * 0.28 });
     }
 
     function drawBorder(g: Graphics, wf: number) {
@@ -688,16 +702,16 @@
         addBorderPath(g);
         g.stroke({ width: lw + 2.2, color: 0x0a1222, alpha: 0.88 });
         addBorderPath(g);
-        g.stroke({ width: lw, color: 0xdbeafe, alpha });
+        g.stroke({ width: lw, color: COL.borderCore, alpha });
 
         addBorderPath(g);
-        g.stroke({ width: 1.2, color: 0x34d399, alpha: 0.24 + wf * 0.18 });
+        g.stroke({ width: 1.2, color: COL.borderAccent, alpha: 0.24 + wf * 0.18 });
 
         const orbAlpha = 0.35 + (Math.sin(t * 2) + 1) * 0.18 + wf * 0.28;
-        g.circle(CR, CR, 4.8).fill({ color: 0x60a5fa, alpha: orbAlpha });
-        g.circle(TW - CR, CR, 4.8).fill({ color: 0x34d399, alpha: orbAlpha });
-        g.circle(CR, TH - CR, 4.8).fill({ color: 0x34d399, alpha: orbAlpha });
-        g.circle(TW - CR, TH - CR, 4.8).fill({ color: 0x60a5fa, alpha: orbAlpha });
+        g.circle(CR, CR, 4.8).fill({ color: COL.blue, alpha: orbAlpha });
+        g.circle(TW - CR, CR, 4.8).fill({ color: COL.green, alpha: orbAlpha });
+        g.circle(CR, TH - CR, 4.8).fill({ color: COL.green, alpha: orbAlpha });
+        g.circle(TW - CR, TH - CR, 4.8).fill({ color: COL.blue, alpha: orbAlpha });
     }
 
     function drawBorderRunners(g: Graphics, wf: number) {
@@ -714,10 +728,10 @@
         const xBottomLeft = CR + ((Math.sin(t + 4.5) + 1) * 0.5) * bottomLeftSpan;
 
         const a = 0.28 + wf * 0.34;
-        g.circle(xTopLeft, 2.8, 3.4).fill({ color: 0x60a5fa, alpha: a });
-        g.circle(xTopRight, 2.8, 3.4).fill({ color: 0x34d399, alpha: a });
-        g.circle(xBottomRight, TH - 2.8, 3.4).fill({ color: 0x60a5fa, alpha: a });
-        g.circle(xBottomLeft, TH - 2.8, 3.4).fill({ color: 0x34d399, alpha: a });
+        g.circle(xTopLeft, 2.8, 3.4).fill({ color: COL.blue, alpha: a });
+        g.circle(xTopRight, 2.8, 3.4).fill({ color: COL.green, alpha: a });
+        g.circle(xBottomRight, TH - 2.8, 3.4).fill({ color: COL.blue, alpha: a });
+        g.circle(xBottomLeft, TH - 2.8, 3.4).fill({ color: COL.green, alpha: a });
     }
 
     function drawGoals(g: Graphics, wf: number) {
@@ -725,20 +739,20 @@
         const wg = wf * 0.34;
         const pulse = 0.08 + (Math.sin(performance.now() * 0.008) + 1) * 0.05;
 
-        g.rect(GX, 0, GOAL_W, 16).fill({ color: 0x10b981, alpha: 0.18 + wg + pulse });
-        g.moveTo(GX, 0).lineTo(GX, 16).stroke({ width: 2.8, color: 0x10b981, alpha: 0.8 + wg });
-        g.moveTo(GX + GOAL_W, 0).lineTo(GX + GOAL_W, 16).stroke({ width: 2.8, color: 0x10b981, alpha: 0.8 + wg });
-        g.rect(GX + 4, 2, GOAL_W - 8, 2.6).fill({ color: 0xa7f3d0, alpha: 0.62 + wg });
+        g.rect(GX, 0, GOAL_W, 16).fill({ color: 0x34c8a1, alpha: 0.16 + wg + pulse });
+        g.moveTo(GX, 0).lineTo(GX, 16).stroke({ width: 2.8, color: 0x34c8a1, alpha: 0.74 + wg });
+        g.moveTo(GX + GOAL_W, 0).lineTo(GX + GOAL_W, 16).stroke({ width: 2.8, color: 0x34c8a1, alpha: 0.74 + wg });
+        g.rect(GX + 4, 2, GOAL_W - 8, 2.6).fill({ color: 0xc6f8e4, alpha: 0.54 + wg });
         for (let x = GX + 6; x <= GX + GOAL_W - 6; x += 10) {
-            g.moveTo(x, 5).lineTo(x + 5, 15).stroke({ width: 0.9, color: 0x6ee7b7, alpha: 0.2 + wg });
+            g.moveTo(x, 5).lineTo(x + 5, 15).stroke({ width: 0.9, color: 0x85e8c9, alpha: 0.18 + wg });
         }
 
-        g.rect(GX, TH - 16, GOAL_W, 16).fill({ color: 0x3b82f6, alpha: 0.18 + wg + pulse });
-        g.moveTo(GX, TH).lineTo(GX, TH - 16).stroke({ width: 2.8, color: 0x3b82f6, alpha: 0.8 + wg });
-        g.moveTo(GX + GOAL_W, TH).lineTo(GX + GOAL_W, TH - 16).stroke({ width: 2.8, color: 0x3b82f6, alpha: 0.8 + wg });
-        g.rect(GX + 4, TH - 4.6, GOAL_W - 8, 2.6).fill({ color: 0xbfdbfe, alpha: 0.62 + wg });
+        g.rect(GX, TH - 16, GOAL_W, 16).fill({ color: 0x5e93de, alpha: 0.16 + wg + pulse });
+        g.moveTo(GX, TH).lineTo(GX, TH - 16).stroke({ width: 2.8, color: 0x5e93de, alpha: 0.74 + wg });
+        g.moveTo(GX + GOAL_W, TH).lineTo(GX + GOAL_W, TH - 16).stroke({ width: 2.8, color: 0x5e93de, alpha: 0.74 + wg });
+        g.rect(GX + 4, TH - 4.6, GOAL_W - 8, 2.6).fill({ color: 0xd3e6ff, alpha: 0.54 + wg });
         for (let x = GX + 6; x <= GX + GOAL_W - 6; x += 10) {
-            g.moveTo(x, TH - 15).lineTo(x + 5, TH - 5).stroke({ width: 0.9, color: 0x93c5fd, alpha: 0.2 + wg });
+            g.moveTo(x, TH - 15).lineTo(x + 5, TH - 5).stroke({ width: 0.9, color: 0xa7cfff, alpha: 0.18 + wg });
         }
     }
 
@@ -750,7 +764,7 @@
         for (let x = 0; x < TW; x += 22) {
             const segW = Math.min(14, TW - x);
             const alt = ((x / 22) | 0) % 2 === 0;
-            g.rect(x, TH / 2 - lw / 2, segW, lw).fill({ color: alt ? 0xf43f5e : 0x60a5fa, alpha });
+            g.rect(x, TH / 2 - lw / 2, segW, lw).fill({ color: alt ? 0xf2dfb1 : 0x7eb5ef, alpha });
         }
     }
 
@@ -761,7 +775,7 @@
         const lw = 8 + wf * 12;
         for (let x = 0; x < TW; x += 22) {
             const segW = Math.min(14, TW - x);
-            g.rect(x, TH / 2 - lw / 2, segW, lw).fill({ color: 0xf43f5e, alpha });
+            g.rect(x, TH / 2 - lw / 2, segW, lw).fill({ color: 0xf2dfb1, alpha });
         }
     }
 
@@ -777,7 +791,7 @@
             const t = trailData[i];
             const a = (1 - t.age / 0.1) * 0.55;
             const r = PR * (1 - t.age / 0.1) * 0.75;
-            g.circle(t.x, t.y, r).fill({ color: 0xfedc32, alpha: a });
+            g.circle(t.x, t.y, r).fill({ color: COL.puck, alpha: a });
         }
     }
 
@@ -785,17 +799,17 @@
         g.clear();
         const pulse = 0.5 + (Math.sin(now * 0.02) + 1) * 0.25;
         const ringR = PR + 5 + speedGain * 9;
-        g.circle(px, py, ringR).stroke({ width: 2.1 + speedGain * 1.8, color: 0xfde047, alpha: 0.45 + speedGain * 0.35 });
-        g.circle(px, py, PR * 0.58 + pulse * 2).fill({ color: 0xfff7c2, alpha: 0.22 + speedGain * 0.2 });
-        g.circle(px, py, PR * 0.36 + pulse * 1.2).stroke({ width: 1.3, color: 0xffedd5, alpha: 0.5 + speedGain * 0.2 });
+        g.circle(px, py, ringR).stroke({ width: 2.1 + speedGain * 1.8, color: 0xf2dfb1, alpha: 0.45 + speedGain * 0.35 });
+        g.circle(px, py, PR * 0.58 + pulse * 2).fill({ color: 0xfff4da, alpha: 0.2 + speedGain * 0.2 });
+        g.circle(px, py, PR * 0.36 + pulse * 1.2).stroke({ width: 1.3, color: 0xf7e6c4, alpha: 0.46 + speedGain * 0.2 });
 
         // Keep runtime FX path conservative; complex path strokes can break on some GPU/driver combos.
         const orbit = ringR + 2.5;
         const a = now * 0.012;
         g.circle(px + Math.cos(a) * orbit, py + Math.sin(a) * orbit, 1.8)
-            .fill({ color: 0xf59e0b, alpha: 0.52 + speedGain * 0.26 });
+            .fill({ color: 0xeab15b, alpha: 0.52 + speedGain * 0.26 });
         g.circle(px + Math.cos(a + Math.PI) * orbit, py + Math.sin(a + Math.PI) * orbit, 1.6)
-            .fill({ color: 0xfb923c, alpha: 0.44 + speedGain * 0.22 });
+            .fill({ color: 0xd68f43, alpha: 0.44 + speedGain * 0.22 });
     }
 
     function drawPuckDecal(g: Graphics, px: number, py: number, now: number) {
@@ -877,7 +891,7 @@
         const myIdx = isHost ? 0 : 1;
         const opIdx = isHost ? 1 : 0;
         const myCol = isHost ? "#60a5fa" : "#34d399";
-        const opCol = isHost ? "#34d399" : "#60a5fa";
+        const opCol = isHost ? "#56d8b0" : "#6eaeea";
 
         const opSz = 72 + rs.score_flash[opIdx] * 28;
         const mySz = 72 + rs.score_flash[myIdx] * 28;
@@ -904,7 +918,7 @@
 
         const opM = opScoreText.getLocalBounds();
         opScoreBg.clear();
-        opScoreBg.roundRect(14, pxH / 2 - 8 - opSz - 8, opM.width + 24, opSz + 16, 12).fill({ color: 0x000000, alpha: 0.4 });
+        opScoreBg.roundRect(14, pxH / 2 - 8 - opSz - 8, opM.width + 24, opSz + 16, 12).fill({ color: 0x030712, alpha: 0.34 });
 
         myScoreText.text = String(rs.score[myIdx]);
         myScoreText.style.fontSize = mySz;
@@ -914,7 +928,7 @@
 
         const myM = myScoreText.getLocalBounds();
         myScoreBg.clear();
-        myScoreBg.roundRect(14, pxH / 2 + 8 - 8, myM.width + 24, mySz + 16, 12).fill({ color: 0x000000, alpha: 0.4 });
+        myScoreBg.roundRect(14, pxH / 2 + 8 - 8, myM.width + 24, mySz + 16, 12).fill({ color: 0x030712, alpha: 0.34 });
     }
 
     function updateCountdown() {
@@ -935,8 +949,9 @@
         const pw = totalW + R * 1.6;
         const ph = R * 2.8;
         countdownPanel.clear();
-        countdownPanel.roundRect(pxW / 2 - pw / 2, ly - ph / 2, pw, ph, R * 0.35).fill({ color: 0x000000, alpha: 0.82 });
-        countdownPanel.rect(pxW / 2 - pw / 2, ly - 2, pw, 4).fill({ color: 0x1a1a1a });
+        countdownPanel.roundRect(pxW / 2 - pw / 2, ly - ph / 2, pw, ph, R * 0.35).fill({ color: 0x050d1b, alpha: 0.8 });
+        countdownPanel.roundRect(pxW / 2 - pw / 2, ly - ph / 2, pw, ph, R * 0.35).stroke({ width: 1.2, color: 0x27405f, alpha: 0.6 });
+        countdownPanel.rect(pxW / 2 - pw / 2, ly - 2, pw, 4).fill({ color: 0x11233d, alpha: 0.9 });
 
         const lightSpriteSize = Math.ceil(R * 5);
         for (let i = 0; i < LIGHTS; i++) {
@@ -1279,7 +1294,7 @@
         opScoreText = new Text({
             text: "0",
             style: new TextStyle({
-                fontFamily: "system-ui",
+                fontFamily: "Space Grotesk, Sora, system-ui",
                 fontWeight: "900",
                 fontSize: 72,
                 fill: "#34d399",
@@ -1293,7 +1308,7 @@
         myScoreText = new Text({
             text: "0",
             style: new TextStyle({
-                fontFamily: "system-ui",
+                fontFamily: "Space Grotesk, Sora, system-ui",
                 fontWeight: "900",
                 fontSize: 72,
                 fill: "#60a5fa",
@@ -1382,7 +1397,7 @@
 <div
     bind:this={containerEl}
     class="touch-none block"
-    style="width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; background: #060b14;"
+    style="width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; background: radial-gradient(circle at 50% 35%, #0d1f3d 0%, #050d1d 58%, #030814 100%);"
 ></div>
 
 {#if gameOver}
