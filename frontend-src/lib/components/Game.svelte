@@ -137,26 +137,6 @@
         s.beginPath();
         s.arc(TW / 2, TH / 2, 55, 0, Math.PI * 2);
         s.stroke();
-
-        // Base border (no glow; glow is composited at runtime via wallBorderGlowSprite)
-        const RC = CR - 2;
-        s.strokeStyle = "rgba(148,163,184,0.55)";
-        s.lineWidth = 3.5;
-        s.beginPath();
-        s.moveTo(CR, 2);
-        s.lineTo(GX, 2);
-        s.moveTo(GX + GOAL_W, 2);
-        s.lineTo(TW - CR, 2);
-        s.arc(TW - CR, CR, RC, -Math.PI / 2, 0);
-        s.lineTo(TW - 2, TH - CR);
-        s.arc(TW - CR, TH - CR, RC, 0, Math.PI / 2);
-        s.lineTo(GX + GOAL_W, TH - 2);
-        s.moveTo(GX, TH - 2);
-        s.lineTo(CR, TH - 2);
-        s.arc(CR, TH - CR, RC, Math.PI / 2, Math.PI);
-        s.lineTo(2, CR);
-        s.arc(CR, CR, RC, Math.PI, Math.PI * 1.5);
-        s.stroke();
     }
 
     // ── Pre-rendered sprites (eliminate per-frame shadowBlur + createRadialGradient) ──
@@ -164,17 +144,10 @@
     const PUCK_SPRITE_SIZE = (PR  +  4) * 2;   // puck radius + tiny padding
     const PUCK_GLOW_SIZE   = (PR  + 28) * 2;   // puck glow extends up to 28px
 
-    let paddleBlueSprite:      OffscreenCanvas | null = null;
-    let paddleGreenSprite:     OffscreenCanvas | null = null;
-    let puckBodySprite:        OffscreenCanvas | null = null;
-    let puckGlowSprite:        OffscreenCanvas | null = null;
-    let wallMidlineGlowSprite: OffscreenCanvas | null = null;
-    let wallBorderGlowSprite:  OffscreenCanvas | null = null;
-    let scoreGlowBlueSprite:   OffscreenCanvas | null = null;
-    let scoreGlowGreenSprite:  OffscreenCanvas | null = null;
-    let countdownLitSprite:    OffscreenCanvas | null = null;
-    let countdownUnlitSprite:  OffscreenCanvas | null = null;
-    let countdownLightR = 0;
+    let paddleBlueSprite:  OffscreenCanvas | null = null;
+    let paddleGreenSprite: OffscreenCanvas | null = null;
+    let puckBodySprite:    OffscreenCanvas | null = null;
+    let puckGlowSprite:    OffscreenCanvas | null = null;
 
     function hexToRgba(hex: string, a: number): string {
         const r = parseInt(hex.slice(1, 3), 16);
@@ -240,110 +213,6 @@
         s.arc(cx, cx, size / 2, 0, Math.PI * 2);
         s.fill();
         return oc;
-    }
-
-    function buildWallGlowSprites() {
-        // Midline glow — pre-rendered at full intensity; composited at globalAlpha=wall_flash
-        const ml = new OffscreenCanvas(TW, TH);
-        const ms = ml.getContext("2d")!;
-        ms.shadowColor = "rgba(244,63,94,0.9)";
-        ms.shadowBlur = 14;
-        ms.strokeStyle = "rgba(244,63,94,1)";
-        ms.lineWidth = 2.5;
-        ms.setLineDash([14, 8]);
-        ms.beginPath();
-        ms.moveTo(0, TH / 2);
-        ms.lineTo(TW, TH / 2);
-        ms.stroke();
-        wallMidlineGlowSprite = ml;
-
-        // Border glow — pre-rendered at full intensity
-        const bl = new OffscreenCanvas(TW, TH);
-        const bs = bl.getContext("2d")!;
-        const RC = CR - 2;
-        bs.shadowColor = "rgba(96,165,250,1)";
-        bs.shadowBlur = 18;
-        bs.strokeStyle = "rgba(148,163,184,1)";
-        bs.lineWidth = 3.5;
-        bs.beginPath();
-        bs.moveTo(CR, 2);
-        bs.lineTo(GX, 2);
-        bs.moveTo(GX + GOAL_W, 2);
-        bs.lineTo(TW - CR, 2);
-        bs.arc(TW - CR, CR, RC, -Math.PI / 2, 0);
-        bs.lineTo(TW - 2, TH - CR);
-        bs.arc(TW - CR, TH - CR, RC, 0, Math.PI / 2);
-        bs.lineTo(GX + GOAL_W, TH - 2);
-        bs.moveTo(GX, TH - 2);
-        bs.lineTo(CR, TH - 2);
-        bs.arc(CR, TH - CR, RC, Math.PI / 2, Math.PI);
-        bs.lineTo(2, CR);
-        bs.arc(CR, CR, RC, Math.PI, Math.PI * 1.5);
-        bs.stroke();
-        wallBorderGlowSprite = bl;
-    }
-
-    const SCORE_GLOW_SIZE = 160;
-    function buildScoreGlowSprites() {
-        function make(r: number, g: number, b: number): OffscreenCanvas {
-            const oc = new OffscreenCanvas(SCORE_GLOW_SIZE, SCORE_GLOW_SIZE);
-            const s = oc.getContext("2d")!;
-            const cx = SCORE_GLOW_SIZE / 2;
-            const grad = s.createRadialGradient(cx, cx, 0, cx, cx, cx);
-            grad.addColorStop(0, `rgba(${r},${g},${b},0.6)`);
-            grad.addColorStop(0.5, `rgba(${r},${g},${b},0.2)`);
-            grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-            s.fillStyle = grad;
-            s.fillRect(0, 0, SCORE_GLOW_SIZE, SCORE_GLOW_SIZE);
-            return oc;
-        }
-        scoreGlowBlueSprite  = make(96, 165, 250);
-        scoreGlowGreenSprite = make(52, 211, 153);
-    }
-
-    function buildCountdownSprites(cw: number) {
-        const R = Math.round(cw * 0.055);
-        countdownLightR = R;
-        const SIZE = Math.ceil(R * 2.2) * 2;
-        const cx = SIZE / 2;
-
-        // Lit light — radial glow + filled circle + ring
-        const lit = new OffscreenCanvas(SIZE, SIZE);
-        const ls = lit.getContext("2d")!;
-        const g = ls.createRadialGradient(cx, cx, 0, cx, cx, SIZE / 2);
-        g.addColorStop(0, "rgba(255,30,0,0.55)");
-        g.addColorStop(1, "rgba(255,0,0,0)");
-        ls.fillStyle = g;
-        ls.beginPath();
-        ls.arc(cx, cx, SIZE / 2, 0, Math.PI * 2);
-        ls.fill();
-        ls.shadowColor = "#ff2200";
-        ls.shadowBlur = R;
-        ls.fillStyle = "#ff2200";
-        ls.beginPath();
-        ls.arc(cx, cx, R, 0, Math.PI * 2);
-        ls.fill();
-        ls.shadowBlur = 0;
-        ls.strokeStyle = "#ff6644";
-        ls.lineWidth = Math.max(1.5, R * 0.1);
-        ls.beginPath();
-        ls.arc(cx, cx, R, 0, Math.PI * 2);
-        ls.stroke();
-        countdownLitSprite = lit;
-
-        // Unlit light
-        const unlit = new OffscreenCanvas(SIZE, SIZE);
-        const us = unlit.getContext("2d")!;
-        us.fillStyle = "#220800";
-        us.beginPath();
-        us.arc(cx, cx, R, 0, Math.PI * 2);
-        us.fill();
-        us.strokeStyle = "#3a1a14";
-        us.lineWidth = Math.max(1.5, R * 0.1);
-        us.beginPath();
-        us.arc(cx, cx, R, 0, Math.PI * 2);
-        us.stroke();
-        countdownUnlitSprite = unlit;
     }
 
     // ── Score text-width cache (measureText is slow; scores only go 0–WINNING_SCORE) ──
@@ -487,34 +356,44 @@
     }
 
     function drawTable(ctx: CanvasRenderingContext2D) {
-        // Blit pre-rendered static layer (bg + grid + center circle + base border)
+        // Blit pre-rendered static layer (bg gradient + grid + center circle)
         ctx.drawImage(staticLayer!, 0, 0);
 
         const wf = rs.wall_flash;
 
-        // Wall-flash glow overlays — cheap drawImage at varying alpha, no shadowBlur at runtime
-        if (wf > 0.01) {
-            ctx.globalAlpha = wf;
-            ctx.drawImage(wallMidlineGlowSprite!, 0, 0);
-            ctx.globalAlpha = 1;
-        }
-
-        // Midline — dynamic colour only (no shadowBlur)
+        // Midline — dynamic colour/shadow driven by wall_flash
         ctx.strokeStyle = `rgba(244,63,94,${0.35 + wf * 0.65})`;
         ctx.lineWidth = 2.5;
+        if (wf > 0.01) { ctx.shadowColor = `rgba(244,63,94,${wf * 0.9})`; ctx.shadowBlur = wf * 14; }
         ctx.setLineDash([14, 8]);
         ctx.beginPath();
         ctx.moveTo(0, TH / 2);
         ctx.lineTo(TW, TH / 2);
         ctx.stroke();
         ctx.setLineDash([]);
+        if (wf > 0.01) ctx.shadowBlur = 0;
 
-        // Border glow overlay
-        if (wf > 0.01) {
-            ctx.globalAlpha = wf;
-            ctx.drawImage(wallBorderGlowSprite!, 0, 0);
-            ctx.globalAlpha = 1;
-        }
+        // Border path
+        const RC = CR - 2;
+        if (wf > 0.01) { ctx.shadowColor = `rgba(96,165,250,${wf})`; ctx.shadowBlur = wf * 18; }
+        ctx.strokeStyle = `rgba(148,163,184,${0.55 + wf * 0.45})`;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(CR, 2);
+        ctx.lineTo(GX, 2);
+        ctx.moveTo(GX + GOAL_W, 2);
+        ctx.lineTo(TW - CR, 2);
+        ctx.arc(TW - CR, CR, RC, -Math.PI / 2, 0);
+        ctx.lineTo(TW - 2, TH - CR);
+        ctx.arc(TW - CR, TH - CR, RC, 0, Math.PI / 2);
+        ctx.lineTo(GX + GOAL_W, TH - 2);
+        ctx.moveTo(GX, TH - 2);
+        ctx.lineTo(CR, TH - 2);
+        ctx.arc(CR, TH - CR, RC, Math.PI / 2, Math.PI);
+        ctx.lineTo(2, CR);
+        ctx.arc(CR, CR, RC, Math.PI, Math.PI * 1.5);
+        ctx.stroke();
+        if (wf > 0.01) ctx.shadowBlur = 0;
 
         // Goals — batched into one path per side
         const wg = wf * 0.4;
@@ -570,59 +449,55 @@
     function drawHUD(ctx: CanvasRenderingContext2D, cw: number, ch: number) {
         const myIdx = isHost ? 0 : 1,
             opIdx = isHost ? 1 : 0;
+        const myCol = isHost ? "#60a5fa" : "#34d399";
+        const opCol = isHost ? "#34d399" : "#60a5fa";
 
-        // Score — fixed 72px font; score_flash shown via pre-rendered glow sprite (no shadowBlur)
+        // Score with glow and background pill
+        const opSz = 72 + rs.score_flash[opIdx] * 28;
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
-        ctx.font = "900 72px system-ui";
 
+        // Background pill for opponent score
+        if (rs.score_flash[opIdx] > 0) {
+            ctx.shadowColor = opCol;
+            ctx.shadowBlur = 28;
+        }
         const opText = String(rs.score[opIdx]);
-        const opW = getScoreWidth(ctx, opText, 72);
-        const opFlash = rs.score_flash[opIdx];
-
-        // Glow sprite behind opponent score
-        if (opFlash > 0) {
-            const gs = isHost ? scoreGlowGreenSprite! : scoreGlowBlueSprite!;
-            const half = SCORE_GLOW_SIZE / 2;
-            ctx.globalAlpha = opFlash;
-            ctx.drawImage(gs, 20 + opW / 2 - half, ch / 2 - 8 - 36 - half);
-            ctx.globalAlpha = 1;
-        }
-        // Background pill
+        const opW = getScoreWidth(ctx, opText, opSz);
+        ctx.font = `900 ${opSz}px system-ui`;
         ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.beginPath();
-        ctx.roundRect(14, ch / 2 - 8 - 72 - 8, opW + 24, 88, 12);
+        ctx.roundRect(14, ch/2 - 8 - opSz - 8, opW + 24, opSz + 16, 12);
         ctx.fill();
-        ctx.fillStyle = `rgba(${isHost ? "52,211,153" : "96,165,250"},${0.5 + opFlash * 0.5})`;
+
+        ctx.fillStyle = `rgba(${isHost ? "52,211,153" : "96,165,250"},${0.5 + rs.score_flash[opIdx] * 0.5})`;
         ctx.fillText(opText, 20, ch / 2 - 8);
+        ctx.shadowBlur = 0;
 
+        const mySz = 72 + rs.score_flash[myIdx] * 28;
         ctx.textBaseline = "top";
-        ctx.font = "900 72px system-ui";
 
-        const myText = String(rs.score[myIdx]);
-        const myW = getScoreWidth(ctx, myText, 72);
-        const myFlash = rs.score_flash[myIdx];
-
-        // Glow sprite behind my score
-        if (myFlash > 0) {
-            const gs = isHost ? scoreGlowBlueSprite! : scoreGlowGreenSprite!;
-            const half = SCORE_GLOW_SIZE / 2;
-            ctx.globalAlpha = myFlash;
-            ctx.drawImage(gs, 20 + myW / 2 - half, ch / 2 + 8 + 36 - half);
-            ctx.globalAlpha = 1;
+        // Background pill for my score
+        if (rs.score_flash[myIdx] > 0) {
+            ctx.shadowColor = myCol;
+            ctx.shadowBlur = 28;
         }
-        // Background pill
+        const myText = String(rs.score[myIdx]);
+        const myW = getScoreWidth(ctx, myText, mySz);
+        ctx.font = `900 ${mySz}px system-ui`;
         ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.beginPath();
-        ctx.roundRect(14, ch / 2 + 8 - 8, myW + 24, 88, 12);
+        ctx.roundRect(14, ch/2 + 8 - 8, myW + 24, mySz + 16, 12);
         ctx.fill();
-        ctx.fillStyle = `rgba(${isHost ? "96,165,250" : "52,211,153"},${0.85 + myFlash * 0.15})`;
+
+        ctx.fillStyle = `rgba(${isHost ? "96,165,250" : "52,211,153"},${0.85 + rs.score_flash[myIdx] * 0.15})`;
         ctx.fillText(myText, 20, ch / 2 + 8);
+        ctx.shadowBlur = 0;
 
         if (rs.countdown > 0) {
-            // F1-style lights — pre-rendered sprites, no per-frame gradient creation
+            // F1-style lights: one light turns on every 0.5s, all go dark at 0 → GO
             const numLit = Math.min(5, Math.floor((3.0 - rs.countdown) / 0.5));
-            const LIGHTS = 5, R = countdownLightR, GAP = Math.round(R * 0.55);
+            const LIGHTS = 5, R = Math.round(cw * 0.055), GAP = Math.round(R * 0.55);
             const totalW = LIGHTS * 2 * R + (LIGHTS - 1) * GAP;
             const lx0 = cw / 2 - totalW / 2 + R;
             const ly  = ch * 0.42;
@@ -638,13 +513,38 @@
             ctx.fillStyle = "#1a1a1a";
             ctx.fillRect(cw / 2 - pw / 2, ly - 2, pw, 4);
 
-            const spriteHalf = (countdownLitSprite?.width ?? R * 2) / 2;
             for (let i = 0; i < LIGHTS; i++) {
                 const lxi = lx0 + i * (2 * R + GAP);
-                ctx.drawImage(
-                    i < numLit ? countdownLitSprite! : countdownUnlitSprite!,
-                    lxi - spriteHalf, ly - spriteHalf
-                );
+                const lit = i < numLit;
+
+                if (lit) {
+                    // Red glow halo
+                    const g = ctx.createRadialGradient(lxi, ly, 0, lxi, ly, R * 2.2);
+                    g.addColorStop(0, "rgba(255,30,0,0.55)");
+                    g.addColorStop(1, "rgba(255,0,0,0)");
+                    ctx.fillStyle = g;
+                    ctx.beginPath();
+                    ctx.arc(lxi, ly, R * 2.2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowColor = "#ff2200";
+                    ctx.shadowBlur = R;
+                    ctx.fillStyle = "#ff2200";
+                } else {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = "#220800";
+                }
+
+                ctx.beginPath();
+                ctx.arc(lxi, ly, R, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Housing ring
+                ctx.strokeStyle = lit ? "#ff6644" : "#3a1a14";
+                ctx.lineWidth = Math.max(1.5, R * 0.1);
+                ctx.beginPath();
+                ctx.arc(lxi, ly, R, 0, Math.PI * 2);
+                ctx.stroke();
             }
         }
     }
@@ -691,13 +591,11 @@
     // ── Mount ─────────────────────────────────────────────────────────────────
     onMount(async () => {
         preloadAd(); // start loading while the game initialises
-        buildStaticLayer(); // pre-render bg+grid+circle+border once
+        buildStaticLayer(); // pre-render bg+grid+circle once
         paddleBlueSprite  = buildPaddleSprite("#3b82f6", "#93c5fd");
         paddleGreenSprite = buildPaddleSprite("#10b981", "#6ee7b7");
         puckBodySprite    = buildPuckSprite();
         puckGlowSprite    = buildPuckGlowSprite();
-        buildWallGlowSprites();
-        buildScoreGlowSprites();
         resizeFn = () => {
             const dpr = window.devicePixelRatio || 1;
             canvas.width  = window.innerWidth  * dpr;
@@ -705,7 +603,6 @@
             canvas.style.width  = window.innerWidth  + "px";
             canvas.style.height = window.innerHeight + "px";
             const cw = canvas.width, ch = canvas.height;
-            buildCountdownSprites(cw);
             scale = Math.min(cw / TW, ch / TH) * 0.92;
             ox = (cw - TW * scale) / 2;
             oy = (ch - TH * scale) / 2;
@@ -786,11 +683,11 @@
 </div>
 {:else}
 <button
-    class="fixed top-4 left-4 z-10 w-11 h-11 bg-black/60 text-white/70 rounded-full text-xl flex items-center justify-center active:scale-90 hover:text-white hover:bg-black/80 border border-white/10 shadow-lg transition-all"
+    class="fixed top-4 left-4 z-10 w-11 h-11 bg-black/50 text-white/70 rounded-full text-xl flex items-center justify-center active:scale-90 hover:text-white hover:bg-black/70 backdrop-blur-sm border border-white/10 shadow-lg transition-all"
     onclick={() => { invoke('stop_game').catch(() => {}); onBack?.(); }}
 >✕</button>
 <button
-    class="fixed top-4 right-4 z-10 w-11 h-11 bg-black/60 text-white/70 rounded-full text-xl flex items-center justify-center active:scale-90 hover:text-white hover:bg-black/80 border border-white/10 shadow-lg transition-all"
+    class="fixed top-4 right-4 z-10 w-11 h-11 bg-black/50 text-white/70 rounded-full text-xl flex items-center justify-center active:scale-90 hover:text-white hover:bg-black/70 backdrop-blur-sm border border-white/10 shadow-lg transition-all"
     onclick={() => muted = !muted}
 >{muted ? '🔇' : '🔊'}</button>
 {/if}
