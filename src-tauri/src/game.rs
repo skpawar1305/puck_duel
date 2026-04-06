@@ -87,6 +87,10 @@ struct GameState {
 
     // authority handoff smoothing
     handoff_blend:       f32,
+
+    // single-player AI state
+    ai_think_timer:      f32,
+    ai_target:           [f32; 2],
 }
 
 impl GameState {
@@ -105,6 +109,8 @@ impl GameState {
             prev_recv_host_auth: true,
             is_host, is_single,
             handoff_blend: 0.0,
+            ai_think_timer: 0.0,
+            ai_target: [TW / 2.0, ai::HOME_Y],
         }
     }
 
@@ -169,35 +175,75 @@ impl GameState {
             let puck_approach  = self.puck.vy < -30.0;
             let puck_coming_fast = self.puck.vy < -80.0;
 
-            let (spd, tgt_x, tgt_y): (f32, f32, f32) = if puck_behind {
-                // Puck slipped past AI paddle — chase directly (but slower, so player can score)
-                let ty = (self.puck.y - 15.0).max(PAR);
-                (ai::CHASE_SPEED, self.puck.x, ty)
-            } else if puck_in_half && puck_approach {
-                // Puck in AI half and approaching — intercept with prediction
-                let t = if self.puck.vy < -10.0 {
-                    ((apy - self.puck.y) / self.puck.vy.abs()).clamp(0.0, ai::PREDICTION_TIME)
-                } else { 0.0 };
-                let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
-                
-                // If puck coming fast, be more defensive; otherwise intercept aggressively
-                let ty = if puck_coming_fast {
-                    // Defensive: stay closer to goal, react to puck X
-                    (self.puck.y - 60.0).clamp(ai::DEFENSIVE_Y, TH / 2.0 - PAR / 2.0)
-                } else {
-                    // Aggressive: move up to intercept
-                    (self.puck.y - ai::BLOCK_DISTANCE).clamp(PAR, TH / 2.0 - PAR / 2.0)
-                };
-                (ai::INTERCEPT_SPEED, pred_x, ty)
-            } else {
-                // Puck in host half or not approaching — return to centered defensive home
-                (ai::RETURN_SPEED, TW / 2.0, ai::HOME_Y)
-            };
+            self.ai_think_timer -= dt;
+            if self.ai_think_timer <= 0.0 {
+                self.ai_think_timer = ai::THINK_INTERVAL;
 
-            // Smooth lerp toward target with AI reaction simulation
+                let (spd, base_x, base_y): (f32, f32, f32) = if puck_behind {
+                    // Puck slipped past AI paddle — chase directly (but slower, so player can score)
+                    let ty = (self.puck.y - 15.0).max(PAR);
+                    (ai::CHASE_SPEED, self.puck.x, ty)
+                } else if puck_in_half && puck_approach {
+                    // Puck in AI half and approaching — intercept with prediction
+                    let t = if self.puck.vy < -10.0 {
+                        ((apy - self.puck.y) / self.puck.vy.abs()).clamp(0.0, ai::PREDICTION_TIME)
+                    } else { 0.0 };
+                    let pred_x = (self.puck.x + self.puck.vx * t).clamp(PAR, TW - PAR);
+
+                    // If puck coming fast, be more defensive; otherwise intercept aggressively
+                    let ty = if puck_coming_fast {
+                        (self.puck.y - 60.0).clamp(ai::DEFENSIVE_Y, TH / 2.0 - PAR / 2.0)
+                    } else {
+                        (self.puck.y - ai::BLOCK_DISTANCE).clamp(PAR, TH / 2.0 - PAR / 2.0)
+                    };
+                    (ai::INTERCEPT_SPEED, pred_x, ty)
+                } else {
+                    // Puck in host half or not approaching — return to centered defensive home
+                    (ai::RETURN_SPEED, TW / 2.0, ai::HOME_Y)
+                };
+
+                // Small deterministic aim error to avoid robotic perfection.
+                let noise_phase =
+                    self.puck.x * 0.093 + self.puck.y * 0.071 + self.score[0] as f32 * 0.61 + self.score[1] as f32 * 0.83;
+                let err_x = noise_phase.sin() * ai::AIM_ERROR_X;
+                let err_y = (noise_phase * 1.7).cos() * ai::AIM_ERROR_Y;
+
+                self.ai_target = [
+                    (base_x + err_x).clamp(PAR, TW - PAR),
+                    (base_y + err_y).clamp(PAR, TH / 2.0 - PAR / 2.0),
+                ];
+
+                // Store speed in target drift by shrinking think interval under pressure.
+                if spd >= ai::INTERCEPT_SPEED && puck_coming_fast {
+                    self.ai_think_timer *= 0.75;
+                }
+            }
+
+            // Smooth movement toward last computed target, capped by speed for human-like inertia.
             let lerp = ai::REACTION_LERP;
-            ai.x = ai.x + (tgt_x - ai.x) * lerp;
-            ai.y = ai.y + (tgt_y - ai.y) * lerp;
+            let desired_x = ai.x + (self.ai_target[0] - ai.x) * lerp;
+            let desired_y = ai.y + (self.ai_target[1] - ai.y) * lerp;
+
+            // Convert configured px/frame-like speeds to per-tick max step at 60Hz.
+            let speed = if puck_behind {
+                ai::CHASE_SPEED
+            } else if puck_in_half && puck_approach {
+                ai::INTERCEPT_SPEED
+            } else {
+                ai::RETURN_SPEED
+            };
+            let max_step = (speed * 60.0 * dt).max(0.001);
+
+            let dx = desired_x - ai.x;
+            let dy = desired_y - ai.y;
+            let dist = (dx * dx + dy * dy).sqrt();
+            if dist > max_step {
+                ai.x += dx / dist * max_step;
+                ai.y += dy / dist * max_step;
+            } else {
+                ai.x = desired_x;
+                ai.y = desired_y;
+            }
             
             // Clamp to table bounds
             ai.x = ai.x.max(PAR).min(TW - PAR);

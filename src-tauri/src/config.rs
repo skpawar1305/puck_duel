@@ -94,6 +94,16 @@ pub mod ai {
 
     /// AI defensive position when puck is far
     pub const DEFENSIVE_Y: f32 = 90.0;
+
+    /// How often AI updates its tactical target (seconds)
+    /// Higher values make AI feel more human and less frame-perfect.
+    pub const THINK_INTERVAL: f32 = 0.085;
+
+    /// Maximum horizontal targeting error (pixels)
+    pub const AIM_ERROR_X: f32 = 11.0;
+
+    /// Maximum vertical targeting error (pixels)
+    pub const AIM_ERROR_Y: f32 = 8.0;
 }
 
 /// Network configuration
