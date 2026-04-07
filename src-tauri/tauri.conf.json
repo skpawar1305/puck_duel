@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PuckDuel",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "identifier": "com.dano.puckduel",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1520",
+    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../build"
   },
@@ -34,7 +34,7 @@
       "icons/icon.ico"
     ],
     "android": {
-      "versionCode": 175,
+      "versionCode": 176,
       "minSdkVersion": 28
     }
   },

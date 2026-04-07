@@ -49,6 +49,7 @@
             const savedCam = saved && cameras.find(c => c.id === saved);
             const backCam  = cameras.find(c => /back|rear|env/i.test(c.label));
             const pick     = savedCam ?? backCam ?? cameras[cameras.length - 1];
+            if (!pick) throw new Error('no cameras');
             await startCam(pick.id);
         } catch {
             errMsg = 'Could not access camera — check permissions';
@@ -60,7 +61,7 @@
     });
 </script>
 
-<div class="relative w-full h-full bg-black overflow-hidden rounded-xl">
+<div class="qr-root relative w-full h-full bg-black overflow-hidden rounded-xl">
     <div id="qr-video" class="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover"></div>
 
     {#if cameras.length > 1}
@@ -83,7 +84,5 @@
 </div>
 
 <style>
-    :global(#qr-video video) { width: 100% !important; height: 100% !important; object-fit: cover !important; }
-    :global(#qr-video img) { display: none !important; }
-    :global(#qr-video__scan_region) { background: transparent !important; }
+    .qr-root {}
 </style>

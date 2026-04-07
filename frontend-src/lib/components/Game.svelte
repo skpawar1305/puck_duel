@@ -66,17 +66,17 @@
     const GX = (TW - GOAL_W) / 2;
 
     const COL = {
-        bgTop: "#030814",
-        bgMid: "#0a1830",
-        bgBottom: "#040916",
-        lane: "rgba(168,222,255,0.14)",
-        stripe: "rgba(170,208,240,0.12)",
+        bgTop: "#031022",
+        bgMid: "#0b2240",
+        bgBottom: "#050d1b",
+        lane: "rgba(176,224,255,0.16)",
+        stripe: "rgba(181,219,248,0.14)",
         borderCore: 0xe2eefc,
-        borderAccent: 0xc4f1e0,
+        borderAccent: 0xbdf4e6,
         blue: 0x6eaeea,
         green: 0x56d8b0,
-        puck: 0xf6c668,
-        champagne: 0xf2dfb1,
+        puck: 0xf3bc62,
+        champagne: 0xf5e2b8,
     } as const;
 
     interface RS {
@@ -208,6 +208,12 @@
         const cx = size / 2,
             cy = size / 2;
 
+        // Soft floor shadow helps paddles feel anchored to the rink.
+        s.fillStyle = "rgba(2,8,20,0.55)";
+        s.beginPath();
+        s.ellipse(cx, cy + PAR * 0.3, PAR * 0.95, PAR * 0.52, 0, 0, Math.PI * 2);
+        s.fill();
+
         const glowGrad = s.createRadialGradient(cx, cy, PAR * 0.4, cx, cy, size / 2);
         glowGrad.addColorStop(0, hexToRgba(col, 0.75));
         glowGrad.addColorStop(0.62, hexToRgba(col, 0.34));
@@ -229,6 +235,12 @@
 
         s.strokeStyle = "rgba(255,255,255,0.42)";
         s.lineWidth = 2.4;
+        s.stroke();
+
+        s.strokeStyle = "rgba(255,255,255,0.24)";
+        s.lineWidth = 0.9;
+        s.beginPath();
+        s.arc(cx, cy, PAR - 5.4, 0, Math.PI * 2);
         s.stroke();
 
         s.strokeStyle = hexToRgba(col, 0.65);
@@ -291,14 +303,23 @@
             cy = size / 2;
 
         const g = s.createRadialGradient(cx - 5, cy - 5, 2, cx, cy, PR);
-        g.addColorStop(0, "#fff9ea");
-        g.addColorStop(0.24, "#f7dfa7");
-        g.addColorStop(0.56, "#e0a74b");
-        g.addColorStop(0.8, "#9c5f1e");
-        g.addColorStop(1, "#2f1a07");
+        g.addColorStop(0, "#fff6e8");
+        g.addColorStop(0.24, "#f6dfb0");
+        g.addColorStop(0.56, "#da9f47");
+        g.addColorStop(0.8, "#91561b");
+        g.addColorStop(1, "#291706");
         s.beginPath();
         s.arc(cx, cy, PR, 0, Math.PI * 2);
         s.fillStyle = g;
+        s.fill();
+
+        const sheen = s.createLinearGradient(cx - PR, cy - PR, cx + PR, cy + PR);
+        sheen.addColorStop(0, "rgba(255,255,255,0.24)");
+        sheen.addColorStop(0.5, "rgba(255,255,255,0)");
+        sheen.addColorStop(1, "rgba(255,255,255,0.16)");
+        s.fillStyle = sheen;
+        s.beginPath();
+        s.arc(cx, cy, PR * 0.96, 0, Math.PI * 2);
         s.fill();
 
         const ring = s.createRadialGradient(cx, cy, PR * 0.3, cx, cy, PR);
@@ -498,6 +519,12 @@
         s.fillStyle = bg;
         s.fillRect(0, 0, TW, TH);
 
+        const topBloom = s.createRadialGradient(TW / 2, -30, 10, TW / 2, 40, TW * 0.7);
+        topBloom.addColorStop(0, "rgba(147,206,255,0.2)");
+        topBloom.addColorStop(1, "rgba(147,206,255,0)");
+        s.fillStyle = topBloom;
+        s.fillRect(0, 0, TW, TH * 0.45);
+
         // Ice slab gradient inside the board area.
         const ice = s.createLinearGradient(0, 8, 0, TH - 8);
         ice.addColorStop(0, "rgba(214,235,255,0.08)");
@@ -526,6 +553,16 @@
             s.stroke();
         }
 
+        // Subtle diagonal sweep for a cleaner premium surface.
+        s.strokeStyle = "rgba(225,241,255,0.08)";
+        s.lineWidth = 1.2;
+        for (let x = -TH; x < TW + TH; x += 46) {
+            s.beginPath();
+            s.moveTo(x, 0);
+            s.lineTo(x + TH * 0.65, TH);
+            s.stroke();
+        }
+
         // Faceoff rings and center marks.
         s.strokeStyle = "rgba(242,223,177,0.44)";
         s.lineWidth = 2;
@@ -549,6 +586,14 @@
         s.arc(TW / 2, 116, 3, 0, Math.PI * 2);
         s.arc(TW / 2, TH - 116, 3, 0, Math.PI * 2);
         s.fill();
+
+        // Corner rivet accents frame the board and improve depth.
+        s.fillStyle = "rgba(236,247,255,0.25)";
+        for (const [x, y] of [[CR, CR], [TW - CR, CR], [CR, TH - CR], [TW - CR, TH - CR]] as [number, number][]) {
+            s.beginPath();
+            s.arc(x, y, 2.1, 0, Math.PI * 2);
+            s.fill();
+        }
 
         // Subtle vignette to keep focus toward center.
         const vignette = s.createRadialGradient(TW / 2, TH / 2, TH * 0.18, TW / 2, TH / 2, TH * 0.72);
@@ -1101,10 +1146,10 @@
         const [rawX, rawY] = tableCoords(e.clientX, e.clientY);
 
         // Match Rust-side paddle clamps so local prediction never escapes playable bounds.
-        const x = rawX.max(PAR).min(TW - PAR);
+        const x = Math.min(Math.max(rawX, PAR), TW - PAR);
         const y = isHost
-            ? rawY.max(TH / 2.0 + PAR / 2.0).min(TH - PAR)
-            : rawY.max(PAR).min(TH / 2.0 - PAR / 2.0);
+            ? Math.min(Math.max(rawY, TH / 2.0 + PAR / 2.0), TH - PAR)
+            : Math.min(Math.max(rawY, PAR), TH / 2.0 - PAR / 2.0);
 
         pendingPtr = [x, y];
         localPaddlePos = [x, y];
