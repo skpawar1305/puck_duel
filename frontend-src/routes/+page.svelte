@@ -25,9 +25,40 @@
   let onlineError = $state("");
   let hostedRoomId = $state<string | null>(null);
   let retryRoomId = $state<string | null>(null); // room to post joiner addr to on retry
+  const ONLINE_P2P_TIMEOUT_MS = 5000;
+  const NETWORK_INCOMPATIBLE_MESSAGE = "Network incompatible. Try different network.";
+  let onlineAttemptTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+  let onlineAttemptId = $state(0);
+
+  function clearOnlineAttemptTimer() {
+    if (!onlineAttemptTimer) return;
+    clearTimeout(onlineAttemptTimer);
+    onlineAttemptTimer = null;
+  }
+
+  function failOnlineAttemptWithNetworkMessage() {
+    onlineConnecting = false;
+    onlineError = NETWORK_INCOMPATIBLE_MESSAGE;
+  }
+
+  function invalidateOnlineAttempt() {
+    onlineAttemptId += 1;
+    clearOnlineAttemptTimer();
+  }
+
+  function startOnlineAttemptTimeout() {
+    invalidateOnlineAttempt();
+    const attemptId = onlineAttemptId;
+    onlineAttemptTimer = setTimeout(() => {
+      if (attemptId !== onlineAttemptId) return;
+      invoke("cancel_online").catch(() => {});
+      failOnlineAttemptWithNetworkMessage();
+    }, ONLINE_P2P_TIMEOUT_MS);
+  }
 
 
   async function cancelOnlineSession(clearError = true) {
+    invalidateOnlineAttempt();
     const roomId = hostedRoomId ?? retryRoomId;
     hostedRoomId = null;
     roomCode = "";
@@ -98,6 +129,7 @@
   // ── Online Host ───────────────────────────────────────────────────────
   async function startOnlineHost() {
     initAudio();
+    startOnlineAttemptTimeout();
     isHost = true;
     isSinglePlayer = false;
     useUdp = false;
@@ -120,8 +152,8 @@
       console.log('[Online Host] State updated, roomCode:', roomCode);
     } catch (e: any) {
       console.error('[Online Host] Error:', e);
-      onlineError = e?.toString() ?? "Failed to connect";
-      onlineConnecting = false;
+      invalidateOnlineAttempt();
+      failOnlineAttemptWithNetworkMessage();
       hostedRoomId = null;
       roomCode = "";
     }
@@ -130,6 +162,7 @@
   // ── Online Join ────────────────────────────────────────────────────────
   function startOnlineJoin() {
     initAudio();
+    invalidateOnlineAttempt();
     isHost = false;
     isSinglePlayer = false;
     onlineError = "";
@@ -140,6 +173,7 @@
 
   async function joinOnlineRoom() {
     if (!joinCode.trim()) return;
+    startOnlineAttemptTimeout();
     onlineConnecting = true;
     onlineError = "";
     retryRoomId = null;
@@ -149,8 +183,8 @@
       // peer-connected event will be emitted when connection established
       // No need to delete room (matchbox handles cleanup)
     } catch (e: any) {
-      onlineError = e?.toString() ?? "Failed to join";
-      onlineConnecting = false;
+      invalidateOnlineAttempt();
+      failOnlineAttemptWithNetworkMessage();
     }
   }
 
@@ -162,6 +196,7 @@
 
   onMount(async () => {
     unlistenPeerConnected = await listen("peer-connected", () => {
+      invalidateOnlineAttempt();
       connectingPeer = null;
       onlineConnecting = false;
       if (hostedRoomId) {
@@ -210,6 +245,7 @@
   });
 
   onDestroy(() => {
+    invalidateOnlineAttempt();
     if (unlistenPeerConnected) unlistenPeerConnected();
     if (unlistenPeerFound) unlistenPeerFound();
     if (unlistenPeerDisconnected) unlistenPeerDisconnected();

@@ -142,8 +142,8 @@ pub mod interpolation {
     pub const ADAPTIVE_ERROR_THRESHOLD: f32 = 100.0;
 
     /// Authority handoff blend factor (how quickly to blend on authority gain)
-    /// Blend over ~3 frames at 60Hz (1/0.35 ≈ 2.8 frames)
-    pub const HANDOFF_BLEND: f32 = 0.35;
+    /// Blend over ~2 frames at 60Hz (1/0.50 = 2 frames)
+    pub const HANDOFF_BLEND: f32 = 0.50;
 
     /// Error threshold for instant snap (pixels)
     /// Re-exported from parent for convenience

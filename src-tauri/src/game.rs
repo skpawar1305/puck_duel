@@ -271,6 +271,16 @@ impl GameState {
             if !self.prev_auth {
                 // Start handoff blend
                 self.handoff_blend = 0.0;
+
+                // Preserve momentum on midline ownership gain when our local state
+                // has nearly stopped but peer still reports meaningful velocity.
+                let near_midline = (self.puck.y - TH / 2.0).abs() <= AUTH_HYSTERESIS * 2.0;
+                let local_spd = (self.puck.vx * self.puck.vx + self.puck.vy * self.puck.vy).sqrt();
+                let peer_spd = (self.target_puck.vx * self.target_puck.vx + self.target_puck.vy * self.target_puck.vy).sqrt();
+                if near_midline && local_spd < 28.0 && peer_spd > 120.0 {
+                    self.puck.vx = self.target_puck.vx * 0.92;
+                    self.puck.vy = self.target_puck.vy * 0.92;
+                }
             }
             
             // Smooth handoff: blend over multiple frames
@@ -286,12 +296,14 @@ impl GameState {
             self.puck.x += self.puck.vx * dt;
             self.puck.y += self.puck.vy * dt;
 
-            // Friction
-            let sp = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if sp > 0.0 {
-                let loss = (FRICTION * sp * dt).min(sp);
-                self.puck.vx -= self.puck.vx/sp * loss;
-                self.puck.vy -= self.puck.vy/sp * loss;
+            // Avoid double damping while handoff interpolation is still active.
+            if self.handoff_blend >= 1.0 {
+                let sp = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
+                if sp > 0.0 {
+                    let loss = (FRICTION * sp * dt).min(sp);
+                    self.puck.vx -= self.puck.vx/sp * loss;
+                    self.puck.vy -= self.puck.vy/sp * loss;
+                }
             }
 
             // Corner fillets
@@ -350,13 +362,16 @@ impl GameState {
             // Auth but in countdown: puck already sits at center from reset_puck().
             // Echo it so the sticky handoff band keeps both peers aligned.
             self.target_puck = self.puck.clone();
+            self.handoff_blend = 0.0;
 
         } else if self.countdown > 0.0 {
             // Non-auth during countdown: snap immediately to whatever auth sent (should be center).
             self.puck.x  = self.target_puck.x;  self.puck.y  = self.target_puck.y;
             self.puck.vx = self.target_puck.vx; self.puck.vy = self.target_puck.vy;
+            self.handoff_blend = 0.0;
 
         } else {
+            self.handoff_blend = 0.0;
             // Dead reckoning — blend toward peer's authoritative state
             self.puck.x += self.puck.vx * dt;
             self.puck.y += self.puck.vy * dt;
@@ -494,6 +509,7 @@ impl GameState {
         let recv_sum   = recv_score.map_or(0, |s| s[0] + s[1]);
         let local_sum  = self.score[0] + self.score[1];
         let fresh_round = recv_sum >= local_sum;
+        let near_handoff_band = (self.puck.y - TH / 2.0).abs() <= AUTH_HYSTERESIS * 2.0;
 
         // Parse audio event flags from peer
         let recv_hit = v["hit"].as_u64().map(|n| n as u8).unwrap_or(0);
@@ -513,7 +529,7 @@ impl GameState {
             // Accept puck+countdown from client when: client is auth (!is_host_auth)
             // OR authority just changed. Ignore stale-round puck packets so an
             // old pre-goal state cannot pull us away from center after scoring.
-            if !is_host_auth || auth_changed {
+            if !is_host_auth || auth_changed || near_handoff_band {
                 if fresh_round {
                     if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
                         self.target_puck = Puck {
@@ -547,7 +563,7 @@ impl GameState {
             // Accept puck+countdown from host when: host is auth (is_host_auth)
             // OR authority just changed. Ignore stale-round puck packets so an
             // old pre-goal state cannot pull us away from center after scoring.
-            if is_host_auth || auth_changed {
+            if is_host_auth || auth_changed || near_handoff_band {
                 if fresh_round {
                     if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
                         self.target_puck = Puck {

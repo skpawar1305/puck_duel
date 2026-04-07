@@ -66,17 +66,17 @@
     const GX = (TW - GOAL_W) / 2;
 
     const COL = {
-        bgTop: "#031022",
-        bgMid: "#0b2240",
-        bgBottom: "#050d1b",
-        lane: "rgba(176,224,255,0.16)",
-        stripe: "rgba(181,219,248,0.14)",
-        borderCore: 0xe2eefc,
-        borderAccent: 0xbdf4e6,
-        blue: 0x6eaeea,
-        green: 0x56d8b0,
-        puck: 0xf3bc62,
-        champagne: 0xf5e2b8,
+        bgTop: "#020914",
+        bgMid: "#0a1a2e",
+        bgBottom: "#040a13",
+        lane: "rgba(159,215,255,0.14)",
+        stripe: "rgba(145,192,232,0.12)",
+        borderCore: 0xd7e4f2,
+        borderAccent: 0x9fd3ff,
+        blue: 0x69b6ff,
+        green: 0x38d7a5,
+        puck: 0xe9ecef,
+        champagne: 0xe8edf5,
     } as const;
 
     interface RS {
@@ -144,7 +144,6 @@
     let puckDecalGfx: Graphics;
     let paddleDecalGfx: Graphics;
     let actorFallbackGfx: Graphics;
-    let puckGlowSpr: Sprite;
     let puckBodySpr: Sprite;
     let puckIconSpr: Sprite;
     let paddleBlueSpr: Sprite;
@@ -169,7 +168,6 @@
 
     const PAD_SPRITE_SIZE = (PAR + 22) * 2;
     const PUCK_SPRITE_SIZE = (PR + 4) * 2;
-    const PUCK_GLOW_SIZE = (PR + 28) * 2;
 
     let onVisibility: (() => void) | null = null;
     let mountedCanvas: HTMLCanvasElement | null = null;
@@ -302,12 +300,12 @@
         const cx = size / 2,
             cy = size / 2;
 
-        const g = s.createRadialGradient(cx - 5, cy - 5, 2, cx, cy, PR);
-        g.addColorStop(0, "#fff6e8");
-        g.addColorStop(0.24, "#f6dfb0");
-        g.addColorStop(0.56, "#da9f47");
-        g.addColorStop(0.8, "#91561b");
-        g.addColorStop(1, "#291706");
+        // Tight, high-contrast puck body without oversized decorative radius.
+        const g = s.createRadialGradient(cx - 3, cy - 4, 2, cx, cy, PR);
+        g.addColorStop(0, "#f8fbff");
+        g.addColorStop(0.3, "#d7dfe7");
+        g.addColorStop(0.72, "#7b8591");
+        g.addColorStop(1, "#151a21");
         s.beginPath();
         s.arc(cx, cy, PR, 0, Math.PI * 2);
         s.fillStyle = g;
@@ -322,10 +320,10 @@
         s.arc(cx, cy, PR * 0.96, 0, Math.PI * 2);
         s.fill();
 
-        const ring = s.createRadialGradient(cx, cy, PR * 0.3, cx, cy, PR);
+        const ring = s.createRadialGradient(cx, cy, PR * 0.26, cx, cy, PR);
         ring.addColorStop(0, "rgba(255,255,255,0)");
-        ring.addColorStop(0.82, "rgba(248,223,169,0)");
-        ring.addColorStop(1, "rgba(248,223,169,0.72)");
+        ring.addColorStop(0.82, "rgba(232,236,242,0)");
+        ring.addColorStop(1, "rgba(232,236,242,0.58)");
         s.fillStyle = ring;
         s.beginPath();
         s.arc(cx, cy, PR, 0, Math.PI * 2);
@@ -336,21 +334,21 @@
         s.arc(cx - 6, cy - 6, PR * 0.2, 0, Math.PI * 2);
         s.fill();
 
-        s.strokeStyle = "rgba(249,227,182,0.84)";
+        s.strokeStyle = "rgba(229,237,247,0.85)";
         s.lineWidth = 1.3;
         s.beginPath();
         s.arc(cx, cy, PR - 1.1, 0, Math.PI * 2);
         s.stroke();
 
         // Dark seam ring to break the "flat coin" silhouette.
-        s.strokeStyle = "rgba(20,12,3,0.9)";
+        s.strokeStyle = "rgba(15,19,24,0.92)";
         s.lineWidth = 2.1;
         s.beginPath();
         s.arc(cx, cy, PR * 0.68, 0, Math.PI * 2);
         s.stroke();
 
         // Bright core ring for immediate readability at small sizes.
-        s.strokeStyle = "rgba(255,245,190,0.95)";
+        s.strokeStyle = "rgba(245,250,255,0.92)";
         s.lineWidth = 1.4;
         s.beginPath();
         s.arc(cx, cy, PR * 0.38, 0, Math.PI * 2);
@@ -367,14 +365,14 @@
             const x1 = Math.cos(a) * (PR * 0.62);
             const y1 = Math.sin(a) * (PR * 0.62);
 
-            s.strokeStyle = "rgba(246,198,104,0.9)";
+            s.strokeStyle = "rgba(196,211,228,0.86)";
             s.lineWidth = 1.7;
             s.beginPath();
             s.moveTo(x0, y0);
             s.lineTo(x1, y1);
             s.stroke();
 
-            s.strokeStyle = "rgba(70,32,6,0.7)";
+            s.strokeStyle = "rgba(28,34,42,0.76)";
             s.lineWidth = 0.8;
             s.beginPath();
             s.moveTo(x0 * 0.96, y0 * 0.96);
@@ -386,7 +384,7 @@
         // High-contrast split arcs: clearly visible even on small mobile screens.
         s.lineCap = "round";
         s.lineWidth = 3.2;
-        s.strokeStyle = "rgba(255,252,242,0.82)";
+        s.strokeStyle = "rgba(251,253,255,0.82)";
         s.beginPath();
         s.arc(cx, cy, PR * 0.84, -Math.PI * 0.06, Math.PI * 0.44);
         s.stroke();
@@ -394,7 +392,7 @@
         s.arc(cx, cy, PR * 0.84, Math.PI * 0.94, Math.PI * 1.44);
         s.stroke();
 
-        s.strokeStyle = "rgba(24,10,2,0.9)";
+        s.strokeStyle = "rgba(18,23,30,0.9)";
         s.beginPath();
         s.arc(cx, cy, PR * 0.84, Math.PI * 0.5, Math.PI * 0.84);
         s.stroke();
@@ -403,11 +401,11 @@
         s.stroke();
 
         // Center emblem avoids the "single-color blob" look.
-        s.fillStyle = "rgba(255,247,224,0.95)";
+        s.fillStyle = "rgba(248,252,255,0.94)";
         s.beginPath();
         s.arc(cx, cy, PR * 0.16, 0, Math.PI * 2);
         s.fill();
-        s.strokeStyle = "rgba(90,40,8,0.9)";
+        s.strokeStyle = "rgba(24,32,41,0.9)";
         s.lineWidth = 1.2;
         s.beginPath();
         s.moveTo(cx - PR * 0.2, cy);
@@ -417,24 +415,6 @@
         s.moveTo(cx, cy - PR * 0.2);
         s.lineTo(cx, cy + PR * 0.2);
         s.stroke();
-
-        return Texture.from(c);
-    }
-
-    function buildPuckGlowTexture(): Texture {
-        const size = PUCK_GLOW_SIZE;
-        const [c, s] = makeCanvas(size, size);
-        const cx = size / 2;
-
-        const grad = s.createRadialGradient(cx, cx, PR * 0.35, cx, cx, size / 2);
-        grad.addColorStop(0, "rgba(255,241,186,0.9)");
-        grad.addColorStop(0.32, "rgba(245,195,92,0.66)");
-        grad.addColorStop(0.6, "rgba(194,120,44,0.3)");
-        grad.addColorStop(1, "rgba(245,195,92,0)");
-        s.fillStyle = grad;
-        s.beginPath();
-        s.arc(cx, cx, size / 2, 0, Math.PI * 2);
-        s.fill();
 
         return Texture.from(c);
     }
@@ -843,33 +823,32 @@
     function drawPuckFx(g: Graphics, px: number, py: number, speedGain: number, now: number) {
         g.clear();
         const pulse = 0.5 + (Math.sin(now * 0.02) + 1) * 0.25;
-        const ringR = PR + 5 + speedGain * 9;
-        g.circle(px, py, ringR).stroke({ width: 2.1 + speedGain * 1.8, color: 0xf2dfb1, alpha: 0.45 + speedGain * 0.35 });
-        g.circle(px, py, PR * 0.58 + pulse * 2).fill({ color: 0xfff4da, alpha: 0.2 + speedGain * 0.2 });
-        g.circle(px, py, PR * 0.36 + pulse * 1.2).stroke({ width: 1.3, color: 0xf7e6c4, alpha: 0.46 + speedGain * 0.2 });
+        const ringR = PR * 0.82;
+        g.circle(px, py, ringR).stroke({ width: 1.6 + speedGain * 0.8, color: 0xf2f6fb, alpha: 0.28 + speedGain * 0.2 });
+        g.circle(px, py, PR * 0.48 + pulse * 1.2).fill({ color: 0xf8fbff, alpha: 0.14 + speedGain * 0.12 });
+        g.circle(px, py, PR * 0.3 + pulse * 0.7).stroke({ width: 1.1, color: 0xe6edf5, alpha: 0.4 + speedGain * 0.1 });
 
-        // Keep runtime FX path conservative; complex path strokes can break on some GPU/driver combos.
-        const orbit = ringR + 2.5;
+        const orbit = PR * 0.64;
         const a = now * 0.012;
         g.circle(px + Math.cos(a) * orbit, py + Math.sin(a) * orbit, 1.8)
-            .fill({ color: 0xeab15b, alpha: 0.52 + speedGain * 0.26 });
+            .fill({ color: 0x9cc9f2, alpha: 0.36 + speedGain * 0.2 });
         g.circle(px + Math.cos(a + Math.PI) * orbit, py + Math.sin(a + Math.PI) * orbit, 1.6)
-            .fill({ color: 0xd68f43, alpha: 0.44 + speedGain * 0.22 });
+            .fill({ color: 0x4ca0ea, alpha: 0.32 + speedGain * 0.16 });
     }
 
     function drawPuckDecal(g: Graphics, px: number, py: number, now: number) {
         g.clear();
-        const r = PR * 0.72;
+        const r = PR * 0.58;
         const a = now * 0.006;
         const dx = Math.cos(a) * r;
         const dy = Math.sin(a) * r;
 
         // Strong split-color dots make puck read as non-mono at a glance.
-        g.circle(px + dx, py + dy, PR * 0.14).fill({ color: 0x60a5fa, alpha: 0.95 });
-        g.circle(px - dx, py - dy, PR * 0.14).fill({ color: 0x34d399, alpha: 0.95 });
+        g.circle(px + dx, py + dy, PR * 0.12).fill({ color: 0x60a5fa, alpha: 0.88 });
+        g.circle(px - dx, py - dy, PR * 0.12).fill({ color: 0x34d399, alpha: 0.88 });
 
         // Crosshair ring keeps structure visible under motion blur.
-        g.circle(px, py, PR * 0.42).stroke({ width: 1.4, color: 0xffffff, alpha: 0.78 });
+        g.circle(px, py, PR * 0.36).stroke({ width: 1.2, color: 0xffffff, alpha: 0.72 });
         g.moveTo(px - PR * 0.2, py).lineTo(px + PR * 0.2, py).stroke({ width: 1.1, color: 0x111827, alpha: 0.8 });
         g.moveTo(px, py - PR * 0.2).lineTo(px, py + PR * 0.2).stroke({ width: 1.1, color: 0x111827, alpha: 0.8 });
     }
@@ -963,7 +942,9 @@
 
         const opM = opScoreText.getLocalBounds();
         opScoreBg.clear();
-        opScoreBg.roundRect(14, pxH / 2 - 8 - opSz - 8, opM.width + 24, opSz + 16, 12).fill({ color: 0x030712, alpha: 0.34 });
+        opScoreBg.roundRect(10, pxH / 2 - 8 - opSz - 12, opM.width + 34, opSz + 20, 18).fill({ color: 0x02060d, alpha: 0.42 });
+        opScoreBg.roundRect(10, pxH / 2 - 8 - opSz - 12, opM.width + 34, opSz + 20, 18).stroke({ width: 1.5, color: isHost ? 0x4ad9aa : 0x76c8ff, alpha: 0.34 });
+        opScoreBg.rect(20, pxH / 2 - 8 - opSz + opSz + 1, Math.max(16, opM.width + 14), 2.4).fill({ color: isHost ? 0x4ad9aa : 0x76c8ff, alpha: 0.45 });
 
         myScoreText.text = String(rs.score[myIdx]);
         myScoreText.style.fontSize = mySz;
@@ -973,7 +954,9 @@
 
         const myM = myScoreText.getLocalBounds();
         myScoreBg.clear();
-        myScoreBg.roundRect(14, pxH / 2 + 8 - 8, myM.width + 24, mySz + 16, 12).fill({ color: 0x030712, alpha: 0.34 });
+        myScoreBg.roundRect(10, pxH / 2, myM.width + 34, mySz + 20, 18).fill({ color: 0x02060d, alpha: 0.42 });
+        myScoreBg.roundRect(10, pxH / 2, myM.width + 34, mySz + 20, 18).stroke({ width: 1.5, color: isHost ? 0x76c8ff : 0x4ad9aa, alpha: 0.34 });
+        myScoreBg.rect(20, pxH / 2 + mySz + 7, Math.max(16, myM.width + 14), 2.4).fill({ color: isHost ? 0x76c8ff : 0x4ad9aa, alpha: 0.45 });
     }
 
     function updateCountdown() {
@@ -1076,14 +1059,10 @@
         }
 
         const sg = Math.min(rs.puck_speed / MAX_SPEED, 1);
-        const energy = 0.78 + (Math.sin(now * 0.014) + 1) * 0.12;
         if (tableFxEnabled) {
             drawPuckFx(puckFxGfx, rs.puck[0], rs.puck[1], sg, now);
             drawPuckDecal(puckDecalGfx, rs.puck[0], rs.puck[1], now);
         }
-        puckGlowSpr.position.set(rs.puck[0], rs.puck[1]);
-        puckGlowSpr.alpha = (0.34 + sg * 0.82) * energy;
-        puckGlowSpr.scale.set(1 + sg * 0.16 + (energy - 0.78) * 0.22);
         puckBodySpr.position.set(rs.puck[0], rs.puck[1]);
         puckBodySpr.rotation += 0.02 + sg * 0.07;
         puckIconSpr.position.set(rs.puck[0], rs.puck[1]);
@@ -1100,7 +1079,7 @@
         }
         const needsActorFallback =
             actorFallbackEnabled
-            && (!puckBodySpr.texture.valid || !paddleBlueSpr.texture.valid || !paddleGreenSpr.texture.valid);
+            && (puckBodySpr.texture.width <= 0 || paddleBlueSpr.texture.width <= 0 || paddleGreenSpr.texture.width <= 0);
         if (needsActorFallback) {
             drawActorFallback(actorFallbackGfx, rs.puck, bluePos, greenPos, sg);
         } else {
@@ -1242,7 +1221,6 @@
         const paddleBlueTex = buildPaddleTexture("#3b82f6", "#93c5fd");
         const paddleGreenTex = buildPaddleTexture("#10b981", "#6ee7b7");
         const puckBodyTex = buildPuckBodyTexture();
-        const puckGlowTex = buildPuckGlowTexture();
         const puckIconTex = buildPuckIconTexture();
         const paddleBlueIconTex = buildPaddleIconTexture("#2563eb");
         const paddleGreenIconTex = buildPaddleIconTexture("#059669");
@@ -1295,10 +1273,6 @@
 
         actorFallbackGfx = new Graphics();
         tableContainer.addChild(actorFallbackGfx);
-
-        puckGlowSpr = new Sprite(puckGlowTex);
-        puckGlowSpr.anchor.set(0.5);
-        tableContainer.addChild(puckGlowSpr);
 
         puckBodySpr = new Sprite(puckBodyTex);
         puckBodySpr.anchor.set(0.5);
