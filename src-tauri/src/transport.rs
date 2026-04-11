@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use matchbox_socket::{WebRtcSocket, PeerId, Packet, PeerState};
+use matchbox_socket::{WebRtcSocket, WebRtcSocketBuilder, ChannelConfig, RtcIceServerConfig, PeerId, Packet, PeerState};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{broadcast, Mutex};
 use tokio::time::Duration;
@@ -155,9 +155,23 @@ pub async fn host_online(
     eprintln!("🌍 [host_online] Starting with room code: {}", code);
     eprintln!("🌍 [host_online] Room URL: {}", room_url);
 
-    // Create WebRTC socket with single unreliable channel
+    // Create WebRTC socket using builder with multiple STUN servers for better connectivity
     eprintln!("🌍 [host_online] Creating WebRTC socket...");
-    let (socket, message_loop) = WebRtcSocket::new_unreliable(&room_url);
+    let ice_config = RtcIceServerConfig {
+        urls: vec![
+            "stun:stun.l.google.com:19302".into(),
+            "stun:stun1.l.google.com:19302".into(),
+            "stun:stun2.l.google.com:19302".into(),
+            "stun:stun3.l.google.com:19302".into(),
+            "stun:stun4.l.google.com:19302".into(),
+            "stun:stun.cloudflare.com:3478".into(),
+        ],
+        ..Default::default()
+    };
+    let (socket, message_loop) = WebRtcSocketBuilder::new(&room_url)
+        .add_channel(ChannelConfig::unreliable())
+        .ice_server(ice_config)
+        .build();
     eprintln!("🌍 [host_online] WebRTC socket created successfully");
 
     // Prepare data for spawning tasks
@@ -207,8 +221,22 @@ pub async fn join_online(
 
     info!("Joining online game with room code: {}", code);
 
-    // Create WebRTC socket with single unreliable channel
-    let (socket, message_loop) = WebRtcSocket::new_unreliable(&room_url);
+    // Create WebRTC socket using builder with multiple STUN servers for better connectivity
+    let ice_config = RtcIceServerConfig {
+        urls: vec![
+            "stun:stun.l.google.com:19302".into(),
+            "stun:stun1.l.google.com:19302".into(),
+            "stun:stun2.l.google.com:19302".into(),
+            "stun:stun3.l.google.com:19302".into(),
+            "stun:stun4.l.google.com:19302".into(),
+            "stun:stun.cloudflare.com:3478".into(),
+        ],
+        ..Default::default()
+    };
+    let (socket, message_loop) = WebRtcSocketBuilder::new(&room_url)
+        .add_channel(ChannelConfig::unreliable())
+        .ice_server(ice_config)
+        .build();
 
     // Store socket and room ID
     *transport.socket.lock().await = Some(socket);
