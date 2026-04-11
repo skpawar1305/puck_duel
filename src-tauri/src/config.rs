@@ -117,6 +117,9 @@ pub mod network {
 
     /// Game loop target FPS
     pub const TARGET_FPS: u32 = 60;
+
+    /// Protocol version for network compatibility checking
+    pub const PROTOCOL_VERSION: u32 = 2;
 }
 
 /// Interpolation configuration for networked multiplayer

@@ -129,7 +129,7 @@
   // ── Online Host ───────────────────────────────────────────────────────
   async function startOnlineHost() {
     initAudio();
-    startOnlineAttemptTimeout();
+    invalidateOnlineAttempt();
     isHost = true;
     isSinglePlayer = false;
     useUdp = false;

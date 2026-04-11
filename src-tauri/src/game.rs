@@ -55,6 +55,7 @@ pub struct RenderState {
     pub wall_hit:      u8,   // 1 = wall hit this frame
     pub goal_scored:   u8,   // 1 = goal this frame
     pub countdown:     f32,  // >0 = pre-game countdown
+    pub version_mismatch: bool,
 }
 
 // ── Game state ────────────────────────────────────────────────────────────────
@@ -91,6 +92,8 @@ struct GameState {
     // single-player AI state
     ai_think_timer:      f32,
     ai_target:           [f32; 2],
+
+    version_mismatch:    bool,
 }
 
 impl GameState {
@@ -111,6 +114,7 @@ impl GameState {
             handoff_blend: 0.0,
             ai_think_timer: 0.0,
             ai_target: [TW / 2.0, ai::HOME_Y],
+            version_mismatch: false,
         }
     }
 
@@ -445,6 +449,7 @@ impl GameState {
             wall_hit:      self.wall_hit,
             goal_scored:   self.goal_scored,
             countdown:     self.countdown,
+            version_mismatch: self.version_mismatch,
         }
     }
 
@@ -456,6 +461,7 @@ impl GameState {
         if self.is_host {
             Some(serde_json::json!({
                 "type": "state",
+                "v": network::PROTOCOL_VERSION,
                 "hostPaddle": [self.host_paddle.x, self.host_paddle.y],
                 "puck":       [self.puck.x, self.puck.y],
                 "vel":        [self.puck.vx, self.puck.vy],
@@ -470,6 +476,7 @@ impl GameState {
         } else {
             Some(serde_json::json!({
                 "type": "input",
+                "v": network::PROTOCOL_VERSION,
                 "pos":        [self.client_paddle.x, self.client_paddle.y],
                 "puck":       [self.puck.x, self.puck.y],
                 "vel":        [self.puck.vx, self.puck.vy],
@@ -489,6 +496,18 @@ impl GameState {
             log::error!("Failed to parse network message: {}", msg);
             return;
         };
+        // Check for protocol version match
+        if let Some(msg_version) = v["v"].as_u64() {
+            if msg_version as u32 != network::PROTOCOL_VERSION {
+                self.version_mismatch = true;
+                return;
+            }
+        } else {
+            // No version means old client
+            self.version_mismatch = true;
+            return;
+        }
+
         // isHostAuth: true = host is currently authoritative
         let is_host_auth = v["isHostAuth"].as_bool().unwrap_or(true);
         // Detect authority transitions — on a handoff, always accept puck data even

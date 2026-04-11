@@ -92,6 +92,7 @@
         wall_hit: number;
         goal_scored: number;
         countdown: number;
+        version_mismatch: boolean;
     }
 
     let rs = $state<RS>({
@@ -107,6 +108,7 @@
         wall_hit: 0,
         goal_scored: 0,
         countdown: 3,
+        version_mismatch: false,
     });
 
     let gameOver = $state(false);
@@ -1172,10 +1174,18 @@
             wall_hit: 0,
             goal_scored: 0,
             countdown: 3,
+            version_mismatch: false,
         };
 
         const ch = new Channel<RS>();
         ch.onmessage = (state) => {
+            if (state.version_mismatch && !gameOver) {
+                gameOver = true;
+                invoke("stop_game").catch(() => {});
+                alert("Version mismatch! Both players must be on the same app version.");
+                onBack?.();
+                return;
+            }
             handleAudio(state);
             rs = state;
             if (!gameOver && (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)) {
@@ -1369,6 +1379,13 @@
 
         const ch = new Channel<RS>();
         ch.onmessage = (state) => {
+            if (state.version_mismatch && !gameOver) {
+                gameOver = true;
+                invoke("stop_game").catch(() => {});
+                alert("Version mismatch! Both players must be on the same app version.");
+                onBack?.();
+                return;
+            }
             handleAudio(state);
             rs = state;
             if (!gameOver && (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)) {
