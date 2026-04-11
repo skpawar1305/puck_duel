@@ -795,20 +795,21 @@ mod tests {
         let mut gs = create_test_gamestate(false, false); // client
         let msg = json!({
             "type": "state",
-            "hostPaddle": [100.0, 200.0],
-            "puck": [50.0, 60.0],
-            "vel": [10.0, -5.0],
+            "v": 2,
+            "hostPaddle": [120.0, 150.0],
+            "puck": [180.0, 180.0],
+            "vel": [10.0, -10.0],
             "score": [1, 0],
-            "countdown": 2.0,
+            "countdown": 0.0,
             "isHostAuth": true
         }).to_string();
         
         gs.apply_net(&msg);
         
-        assert_eq!(gs.target_opponent[0], 100.0);
-        assert_eq!(gs.target_opponent[1], 200.0);
+        assert_eq!(gs.target_opponent[0], 120.0);
+        assert_eq!(gs.target_opponent[1], 150.0);
         assert_eq!(gs.score[0], 1);
-        assert_eq!(gs.countdown, 2.0);
+        assert_eq!(gs.countdown, 0.0);
     }
 
     #[test]
@@ -816,6 +817,7 @@ mod tests {
         let mut gs = create_test_gamestate(true, false); // host
         let msg = json!({
             "type": "input",
+            "v": 2,
             "pos": [150.0, 100.0],
             "puck": [50.0, 60.0],
             "vel": [10.0, -5.0],
@@ -851,6 +853,7 @@ mod tests {
         // Remote has higher score for client
         let msg = json!({
             "type": "input",
+            "v": 2,
             "pos": [100.0, 100.0],
             "score": [1, 3],
             "isHostAuth": true

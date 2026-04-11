@@ -27,17 +27,17 @@ pub const CORNER_RADIUS: f32 = 42.0;
 pub const MAX_SPEED: f32 = 950.0;
 
 /// Minimum puck speed after paddle hit (ensures satisfying shots)
-pub const MIN_HIT_SPEED: f32 = 180.0;
+pub const MIN_HIT_SPEED: f32 = 250.0;
 
 /// Paddle hit power multiplier (how much paddle velocity transfers to puck)
-pub const PADDLE_POWER: f32 = 1.4;
+pub const PADDLE_POWER: f32 = 1.25;
 
 /// Wall restitution coefficient (1.0 = perfectly elastic, 0.0 = no bounce)
-pub const WALL_REST: f32 = 0.92;
+pub const WALL_REST: f32 = 0.88;
 
 /// Friction coefficient applied to puck velocity each frame
 /// Higher = more friction = puck slows faster
-pub const FRICTION: f32 = 0.15;
+pub const FRICTION: f32 = 0.06;
 
 /// Authority hysteresis band around midline (pixels)
 /// Prevents rapid authority flipping when puck is near center
