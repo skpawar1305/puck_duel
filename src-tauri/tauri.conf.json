@@ -34,7 +34,7 @@
       "icons/icon.ico"
     ],
     "android": {
-      "versionCode": 177,
+      "versionCode": 178,
       "minSdkVersion": 28
     }
   },
