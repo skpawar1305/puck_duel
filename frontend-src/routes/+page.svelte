@@ -26,7 +26,7 @@
   let hostedRoomId = $state<string | null>(null);
   let retryRoomId = $state<string | null>(null); // room to post joiner addr to on retry
   const ONLINE_P2P_TIMEOUT_MS = 5000;
-  const NETWORK_INCOMPATIBLE_MESSAGE = "Network incompatible. Try different network.";
+  const NETWORK_INCOMPATIBLE_MESSAGE = "Network incompatible. Try switching to Mobile Data (IPv6) for better connectivity.";
   let onlineAttemptTimer = $state<ReturnType<typeof setTimeout> | null>(null);
   let onlineAttemptId = $state(0);
 
