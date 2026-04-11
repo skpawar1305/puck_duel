@@ -297,45 +297,63 @@ impl GameState {
                 self.puck.vy = self.puck.vy + (self.target_puck.vy - self.puck.vy) * blend;
             }
             
-            self.puck.x += self.puck.vx * dt;
-            self.puck.y += self.puck.vy * dt;
+            let substeps = 4;
+            let sub_dt = dt / substeps as f32;
+            let mut sub_hit = false;
+            let mut sub_wall_hit = false;
 
-            // Avoid double damping while handoff interpolation is still active.
-            if self.handoff_blend >= 1.0 {
-                let sp = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-                if sp > 0.0 {
-                    let loss = (FRICTION * sp * dt).min(sp);
-                    self.puck.vx -= self.puck.vx/sp * loss;
-                    self.puck.vy -= self.puck.vy/sp * loss;
+            for _ in 0..substeps {
+                self.puck.x += self.puck.vx * sub_dt;
+                self.puck.y += self.puck.vy * sub_dt;
+
+                // Avoid double damping while handoff interpolation is still active.
+                if self.handoff_blend >= 1.0 {
+                    let sp = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
+                    if sp > 0.0 {
+                        let loss = (FRICTION * sp * sub_dt).min(sp);
+                        self.puck.vx -= self.puck.vx/sp * loss;
+                        self.puck.vy -= self.puck.vy/sp * loss;
+                    }
                 }
+
+                // Corner fillets
+                let (px, py) = (self.puck.x, self.puck.y);
+                sub_wall_hit |= collide_corner_puck(&mut self.puck, CR,    CR,    px<CR    && py<CR);
+                sub_wall_hit |= collide_corner_puck(&mut self.puck, TW-CR, CR,    px>TW-CR && py<CR);
+                sub_wall_hit |= collide_corner_puck(&mut self.puck, CR,    TH-CR, px<CR    && py>TH-CR);
+                sub_wall_hit |= collide_corner_puck(&mut self.puck, TW-CR, TH-CR, px>TW-CR && py>TH-CR);
+
+                // Side walls
+                if      self.puck.x < PR    { self.puck.x = PR;    self.puck.vx =  self.puck.vx.abs()*WALL_REST; sub_wall_hit=true; }
+                else if self.puck.x > TW-PR { self.puck.x = TW-PR; self.puck.vx = -self.puck.vx.abs()*WALL_REST; sub_wall_hit=true; }
+                self.puck.x = self.puck.x.clamp(PR, TW - PR); // hard safety clamp
+
+                // End walls
+                let in_gap = (self.puck.x - TW/2.0).abs() < GOAL_W/2.0 + PR*0.6;
+                if !in_gap {
+                    if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; sub_wall_hit=true; }
+                    else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; sub_wall_hit=true; }
+                }
+
+                // Goal posts
+                sub_wall_hit |= collide_goal_post(&mut self.puck, GX,          0.0);
+                sub_wall_hit |= collide_goal_post(&mut self.puck, GX+GOAL_W,   0.0);
+                sub_wall_hit |= collide_goal_post(&mut self.puck, GX,           TH);
+                sub_wall_hit |= collide_goal_post(&mut self.puck, GX+GOAL_W,    TH);
+
+                // Paddle collisions
+                let hp = self.host_paddle.clone();
+                let cp = self.client_paddle.clone();
+                if collide_paddle_puck(&mut self.puck, &hp) { sub_hit = true; }
+                if collide_paddle_puck(&mut self.puck, &cp) { sub_hit = true; }
+
+                // Speed clamp (max only)
+                let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
+                if cs > MAX_SPEED { self.puck.vx=self.puck.vx/cs*MAX_SPEED; self.puck.vy=self.puck.vy/cs*MAX_SPEED; }
             }
 
-            // Corner fillets
-            let mut wh = false;
-            let (px, py) = (self.puck.x, self.puck.y);
-            wh |= collide_corner_puck(&mut self.puck, CR,    CR,    px<CR    && py<CR);
-            wh |= collide_corner_puck(&mut self.puck, TW-CR, CR,    px>TW-CR && py<CR);
-            wh |= collide_corner_puck(&mut self.puck, CR,    TH-CR, px<CR    && py>TH-CR);
-            wh |= collide_corner_puck(&mut self.puck, TW-CR, TH-CR, px>TW-CR && py>TH-CR);
-
-            // Side walls
-            if      self.puck.x < PR    { self.puck.x = PR;    self.puck.vx =  self.puck.vx.abs()*WALL_REST; wh=true; }
-            else if self.puck.x > TW-PR { self.puck.x = TW-PR; self.puck.vx = -self.puck.vx.abs()*WALL_REST; wh=true; }
-            self.puck.x = self.puck.x.clamp(PR, TW - PR); // hard safety clamp
-
-            // End walls
-            let in_gap = (self.puck.x - TW/2.0).abs() < GOAL_W/2.0 + PR*0.6;
-            if !in_gap {
-                if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; wh=true; }
-                else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; wh=true; }
-            }
-
-            // Goal posts
-            wh |= collide_goal_post(&mut self.puck, GX,          0.0);
-            wh |= collide_goal_post(&mut self.puck, GX+GOAL_W,   0.0);
-            wh |= collide_goal_post(&mut self.puck, GX,           TH);
-            wh |= collide_goal_post(&mut self.puck, GX+GOAL_W,    TH);
-            if wh { self.wall_hit = 1; self.wall_flash = 1.0; }
+            if sub_wall_hit { self.wall_hit = 1; self.wall_flash = 1.0; }
+            if sub_hit { self.hit = 1; }
 
             // Goals — score when puck centre crosses the goal line
             if self.puck.y < 0.0 {
@@ -347,16 +365,6 @@ impl GameState {
                 self.goal_flash = 1.0; self.score_flash[1] = 1.0;
                 self.reset_puck(); self.countdown = 2.5;
             }
-
-            // Paddle collisions
-            let hp = self.host_paddle.clone();
-            let cp = self.client_paddle.clone();
-            if collide_paddle_puck(&mut self.puck, &hp) { self.hit = 1; }
-            if collide_paddle_puck(&mut self.puck, &cp) { self.hit = 1; }
-
-            // Speed clamp (max only)
-            let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if cs > MAX_SPEED { self.puck.vx=self.puck.vx/cs*MAX_SPEED; self.puck.vy=self.puck.vy/cs*MAX_SPEED; }
 
             // Echo authoritative puck into target_puck so the next ownership
             // decision uses the freshest crossing/reset state.

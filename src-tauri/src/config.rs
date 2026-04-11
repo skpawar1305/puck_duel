@@ -23,8 +23,8 @@ pub const GOAL_WIDTH: f32 = 110.0;
 /// Corner fillet radius (rounded corners of the table)
 pub const CORNER_RADIUS: f32 = 42.0;
 
-/// Maximum puck speed (prevents tunneling through walls)
-pub const MAX_SPEED: f32 = 1100.0;
+/// Maximum speed of the puck
+pub const MAX_SPEED: f32 = 950.0;
 
 /// Minimum puck speed after paddle hit (ensures satisfying shots)
 pub const MIN_HIT_SPEED: f32 = 180.0;
