@@ -183,6 +183,7 @@
   let mountedCanvas: HTMLCanvasElement | null = null;
   let audioUnlocked = false;
   let tableFxEnabled = true;
+  let cacheWallFlash = -1;
   let actorFallbackEnabled = false;
 
   function unlockAudioOnce() {
@@ -745,7 +746,7 @@
 
   function drawBorderGlow(g: Graphics, wf: number) {
     g.clear();
-    const idle = 0.06 + (Math.sin(performance.now() * 0.004) + 1) * 0.025;
+    const idle = 0.085;
     addBorderPath(g);
     g.stroke({
       width: 6 + wf * 9,
@@ -756,8 +757,7 @@
 
   function drawBorder(g: Graphics, wf: number) {
     g.clear();
-    const t = performance.now() * 0.004;
-    const alpha = 0.72 + wf * 0.26;
+        const alpha = 0.72 + wf * 0.26;
     const lw = 3.4 + wf * 3.6;
 
     addBorderPath(g);
@@ -777,15 +777,8 @@
 
   function drawBorderRunners(g: Graphics, wf: number) {
     g.clear();
-    const t = performance.now() * 0.0038;
-    const topLeftSpan = GX - CR;
-    const topRightSpan = TW - CR - (GX + GOAL_W);
-    const bottomLeftSpan = GX - CR;
-    const bottomRightSpan = TW - CR - (GX + GOAL_W);
-
-    const xTopLeft = CR + (Math.sin(t) + 1) * 0.5 * topLeftSpan;
-    const xTopRight =
-      GX + GOAL_W + (Math.sin(t + 1.6) + 1) * 0.5 * topRightSpan;
+    const xTopLeft = CR + 0.5 * topLeftSpan;
+    const xTopRight = GX + GOAL_W + 0.5 * topRightSpan;
     const xBottomRight =
       GX + GOAL_W + (Math.sin(t + 3.1) + 1) * 0.5 * bottomRightSpan;
     const xBottomLeft = CR + (Math.sin(t + 4.5) + 1) * 0.5 * bottomLeftSpan;
@@ -800,7 +793,7 @@
   function drawGoals(g: Graphics, wf: number) {
     g.clear();
     const wg = wf * 0.34;
-    const pulse = 0.08 + (Math.sin(performance.now() * 0.008) + 1) * 0.05;
+    const pulse = 0.13;
 
     g.rect(GX, 0, GOAL_W, 16).fill({
       color: 0x34c8a1,
@@ -845,7 +838,7 @@
 
   function drawMidline(g: Graphics, wf: number) {
     g.clear();
-    const wave = 0.1 + (Math.sin(performance.now() * 0.01) + 1) * 0.08;
+    const wave = 0.18;
     const alpha = 0.32 + wf * 0.5 + wave;
     const lw = 2.5 + wf * 3;
     for (let x = 0; x < TW; x += 22) {
@@ -860,7 +853,7 @@
 
   function drawMidlineGlow(g: Graphics, wf: number) {
     g.clear();
-    const pulse = 0.05 + (Math.sin(performance.now() * 0.008) + 1) * 0.05;
+    const pulse = 0.1;
     const alpha = pulse + wf * 0.3;
     const lw = 8 + wf * 12;
     for (let x = 0; x < TW; x += 22) {
@@ -1182,13 +1175,16 @@
 
     if (tableFxEnabled) {
       try {
-        drawBorderGlow(borderGlowGfx, rs.wall_flash);
-        drawBorderRunners(borderRunnerGfx, rs.wall_flash);
-        drawMidlineGlow(midlineGlowGfx, rs.wall_flash);
-        drawWallFlashOverlay(wallFlashGfx, rs.wall_flash);
-        drawBorder(borderGfx, rs.wall_flash);
-        drawGoals(goalsGfx, rs.wall_flash);
-        drawMidline(midlineGfx, rs.wall_flash);
+        if (rs.wall_flash !== cacheWallFlash) {
+          cacheWallFlash = rs.wall_flash;
+          drawBorderGlow(borderGlowGfx, rs.wall_flash);
+          drawBorderRunners(borderRunnerGfx, rs.wall_flash);
+          drawMidlineGlow(midlineGlowGfx, rs.wall_flash);
+          drawWallFlashOverlay(wallFlashGfx, rs.wall_flash);
+          drawBorder(borderGfx, rs.wall_flash);
+          drawGoals(goalsGfx, rs.wall_flash);
+          drawMidline(midlineGfx, rs.wall_flash);
+        }
         drawTrailGfx(trailGfx, trail);
       } catch (e) {
         // If a device cannot handle one FX path, keep gameplay visible by disabling advanced table FX.

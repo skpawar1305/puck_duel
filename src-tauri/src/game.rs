@@ -373,11 +373,11 @@ impl GameState {
             if self.puck.y < 0.0 {
                 self.score[0] += 1; self.goal_scored = 1;
                 self.goal_flash = 1.0; self.score_flash[0] = 1.0;
-                self.reset_puck(Some(1)); self.countdown = 2.5;
+                self.reset_puck(Some(1)); self.countdown = crate::config::GOAL_COUNTDOWN;
             } else if self.puck.y > TH {
                 self.score[1] += 1; self.goal_scored = 1;
                 self.goal_flash = 1.0; self.score_flash[1] = 1.0;
-                self.reset_puck(Some(0)); self.countdown = 2.5;
+                self.reset_puck(Some(0)); self.countdown = crate::config::GOAL_COUNTDOWN;
             }
 
             // Echo authoritative puck into target_puck so the next ownership
@@ -418,7 +418,7 @@ impl GameState {
             if self.puck.y < 0.0 || self.puck.y > TH {
                 let loser = if self.puck.y < 0.0 { 1 } else { 0 };
                 self.reset_puck(Some(loser));
-                self.countdown = 2.5; // prevent physics running before auth side confirms reset
+                self.countdown = crate::config::GOAL_COUNTDOWN; // prevent physics running before auth side confirms reset
                 self.target_puck = self.puck.clone();
             }
 
@@ -552,14 +552,13 @@ impl GameState {
             self.score[0] = self.score[0].max(recv_score[0]);
             self.score[1] = self.score[1].max(recv_score[1]);
 
-            if !is_host_auth || auth_changed {
-                if fresh_round {
+            if (!is_host_auth || auth_changed)
+                && fresh_round {
                     self.target_puck = Puck { x: puck_x, y: puck_y, vx: puck_vx, vy: puck_vy };
                     if countdown_val > self.countdown + 1.0 || countdown_val < self.countdown {
                         self.countdown = countdown_val;
                     }
                 }
-            }
             if recv_hit { self.hit = 1; }
             if recv_wall_hit { self.wall_hit = 1; }
             if recv_goal_scored { self.goal_scored = 1; }
@@ -569,14 +568,13 @@ impl GameState {
                 self.score[0] = self.score[0].max(recv_score[0]);
                 self.score[1] = self.score[1].max(recv_score[1]);
             }
-            if is_host_auth || auth_changed {
-                if fresh_round {
+            if (is_host_auth || auth_changed)
+                && fresh_round {
                     self.target_puck = Puck { x: puck_x, y: puck_y, vx: puck_vx, vy: puck_vy };
                     if countdown_val > self.countdown + 1.0 || countdown_val < self.countdown {
                         self.countdown = countdown_val;
                     }
                 }
-            }
             if recv_hit { self.hit = 1; }
             if recv_wall_hit { self.wall_hit = 1; }
             if recv_goal_scored { self.goal_scored = 1; }
@@ -636,14 +634,19 @@ pub async fn start_game(
         // Skip missed ticks to prevent spiral of death — keeps game smooth even if scheduler delays
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut last     = Instant::now();
+        let mut accumulator = 0.0;
+        const TIME_STEP: f32 = 1.0 / 120.0; // Fixed 120Hz physics
 
         while running.load(Ordering::Relaxed) {
             interval.tick().await;
-            if paused.load(Ordering::Relaxed) { continue; }
+            if paused.load(Ordering::Relaxed) {
+                last = Instant::now();
+                continue;
+            }
             let now = Instant::now();
-            // Cap at 33 ms (2 frames) — prevents large physics jumps after scheduler delays
-            let dt  = now.duration_since(last).as_secs_f32().min(0.033);
+            let dt  = now.duration_since(last).as_secs_f32().min(0.05); // cap at 50ms
             last = now;
+            accumulator += dt;
 
             // Drain ALL pending network messages (take only the latest if multiple arrived)
             loop {
@@ -655,13 +658,16 @@ pub async fn start_game(
                 }
             }
 
-            // Physics tick
+            // Physics fixed-step tick
             let ptr = *pointer.lock().unwrap();
-            gs.update(dt, ptr);
+            while accumulator >= TIME_STEP {
+                gs.update(TIME_STEP, ptr);
+                accumulator -= TIME_STEP;
+            }
 
             if let Some(msg) = gs.net_msg() {
                 if use_udp {
-                    let peer_opt: Option<SocketAddr> = { udp_peer.lock().await.clone() };
+                    let peer_opt: Option<SocketAddr> = { *udp_peer.lock().await };
                     if let Some(peer) = peer_opt {
                         if let Some(sock) = &*udp_socket.lock().await {
                             let _ = sock.send_to(&msg, peer).await;
@@ -673,7 +679,7 @@ pub async fn start_game(
                     if let (Some(socket), Some(peer)) = (socket_guard.as_mut(), peer_guard.as_ref()) {
                         if let Ok(channel) = socket.get_channel_mut(0) {
                             let packet = Packet::from(msg);
-                            let _ = channel.send(packet, *peer);
+                            channel.send(packet, *peer);
                         }
                     }
                 }
@@ -819,7 +825,7 @@ mod tests {
     fn test_stale_packet_guard() {
         let mut gs = create_test_gamestate(false, false);
         gs.score = [1, 0]; // Local already scored
-        gs.countdown = 2.5; // Post-goal countdown
+        gs.countdown = crate::config::GOAL_COUNTDOWN; // Post-goal countdown
         
         // Stale packet from before goal (score sum 0 < 1)
         let stale_msg = build_test_packet(1, 100.0, 200.0, 50.0, 60.0, 10.0, -5.0, 0, 0, 0.0, 0);
