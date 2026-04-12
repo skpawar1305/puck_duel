@@ -14,7 +14,7 @@ pub struct WebRtcTransportState {
     /// Background task handle for message loop
     bg_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// Broadcast channel for received messages
-    pub msg_tx: broadcast::Sender<String>,
+    pub msg_tx: broadcast::Sender<Vec<u8>>,
     /// Room ID for current hosted/joined room
     room_id: Arc<Mutex<Option<String>>>,
     /// Peer ID of the connected peer (if any)
@@ -44,7 +44,7 @@ impl WebRtcTransportState {
     }
 
     /// Get a reference to the msg_tx channel
-    pub fn get_msg_tx(&self) -> &broadcast::Sender<String> {
+    pub fn get_msg_tx(&self) -> &broadcast::Sender<Vec<u8>> {
         &self.msg_tx
     }
 
@@ -75,7 +75,7 @@ impl WebRtcTransportState {
 fn spawn_socket_tasks(
     socket: Arc<Mutex<Option<WebRtcSocket>>>,
     driver: impl std::future::Future<Output = Result<(), matchbox_socket::Error>> + Send + 'static,
-    msg_tx: broadcast::Sender<String>,
+    msg_tx: broadcast::Sender<Vec<u8>>,
     peer_id: Arc<Mutex<Option<PeerId>>>,
     app: AppHandle,
 ) -> tokio::task::JoinHandle<()> {
@@ -120,11 +120,7 @@ fn spawn_socket_tasks(
                     // Receive incoming messages
                     if let Ok(channel) = socket.get_channel_mut(0) {
                         for (_peer, packet) in channel.receive() {
-                            if let Ok(msg) = String::from_utf8(packet.to_vec()) {
-                                let _ = msg_tx.send(msg);
-                            } else {
-                                warn!("Received invalid UTF-8 network packet");
-                            }
+                            let _ = msg_tx.send(packet.to_vec());
                         }
                     }
                 }
@@ -254,14 +250,14 @@ pub async fn join_online(
 
 /// Send a raw string message on the active WebRTC data channel.
 /// Returns `true` if the send succeeded.
-pub async fn send_msg(transport: &WebRtcTransportState, msg: String) -> bool {
+pub async fn send_msg(transport: &WebRtcTransportState, msg: Vec<u8>) -> bool {
     let mut socket_guard = transport.socket.lock().await;
     let peer_guard = transport.peer_id.lock().await;
     if let (Some(socket), Some(peer)) = (socket_guard.as_mut(), peer_guard.as_ref()) {
         // Use channel 0 (unreliable datagram channel)
         match socket.get_channel_mut(0) {
             Ok(channel) => {
-                let packet = Packet::from(msg.into_bytes());
+                let packet = Packet::from(msg);
                 if let Err(e) = channel.try_send(packet, *peer) {
                     warn!("Failed to send network message: {:?}", e);
                     false

@@ -16,7 +16,7 @@ pub struct UdpState {
     pub socket: Arc<Mutex<Option<Arc<UdpSocket>>>>,
     pub peer: Arc<Mutex<Option<SocketAddr>>>,
     /// broadcast channel for received messages, same semantics as TransportState
-    pub msg_tx: tokio::sync::broadcast::Sender<String>,
+    pub msg_tx: tokio::sync::broadcast::Sender<Vec<u8>>,
     /// background task handle for discovery; abort to restart
     pub discovery_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// background task handle for the main recv loop; abort before rebinding
@@ -45,7 +45,7 @@ fn spawn_recv_loop(
     socket: Arc<UdpSocket>,
     peer: Arc<Mutex<Option<SocketAddr>>>,
     app: AppHandle,
-    msg_tx: tokio::sync::broadcast::Sender<String>,
+    msg_tx: tokio::sync::broadcast::Sender<Vec<u8>>,
     notify_peer_connected: bool,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -64,10 +64,10 @@ fn spawn_recv_loop(
                         peer_notified = true;
                         let _ = app.emit("peer-connected", ());
                     }
-                    if let Ok(msg) = String::from_utf8(buf[..len].to_vec()) {
-                        let _ = app.emit("udp-msg-received", (addr.to_string(), msg.clone()));
-                        let _ = msg_tx.send(msg); // also broadcast into channel
-                    }
+                    let packet = buf[..len].to_vec();
+                    // We don't emit udp-msg-received here since we'd have to serialize binary for JS;
+                    // the rust backend receives it directly via msg_tx anyway.
+                    let _ = msg_tx.send(packet);
                 }
                 Err(e) => {
                     eprintln!("[udp] recv error: {}", e);
@@ -132,12 +132,12 @@ pub async fn connect_udp_client(
 /// Send a message to the last-known peer address. Returns `false` if we don't
 /// have either a socket or a peer yet, or if the send fails.
 #[tauri::command]
-pub async fn host_send_msg(state: State<'_, UdpState>, msg: String) -> Result<bool, String> {
+pub async fn host_send_msg(state: State<'_, UdpState>, msg: Vec<u8>) -> Result<bool, String> {
     let peer_opt = { state.peer.lock().await.clone() };
     if let Some(peer) = peer_opt {
         if let Some(sock_arc) = &*state.socket.lock().await {
             // sock_arc is Arc<UdpSocket>
-            return Ok(sock_arc.send_to(msg.as_bytes(), peer).await.is_ok());
+            return Ok(sock_arc.send_to(&msg, peer).await.is_ok());
         }
     }
     Ok(false)
@@ -146,18 +146,18 @@ pub async fn host_send_msg(state: State<'_, UdpState>, msg: String) -> Result<bo
 /// Alias for `host_send_msg` so the frontend doesn't need to care about which
 /// side it is running on.
 #[tauri::command]
-pub async fn client_send_msg(state: State<'_, UdpState>, msg: String) -> Result<bool, String> {
+pub async fn client_send_msg(state: State<'_, UdpState>, msg: Vec<u8>) -> Result<bool, String> {
     host_send_msg(state, msg).await
 }
 
 /// Internal helper used by the game engine, not exposed as a Tauri command.
 ///
 /// Returns `true` on success (message sent) and `false` otherwise.
-pub async fn send_msg_internal(state: &UdpState, msg: String) -> bool {
+pub async fn send_msg_internal(state: &UdpState, msg: Vec<u8>) -> bool {
     let peer_opt = { state.peer.lock().await.clone() };
     if let Some(peer) = peer_opt {
         if let Some(sock) = &*state.socket.lock().await {
-            return sock.send_to(msg.as_bytes(), peer).await.is_ok();
+            return sock.send_to(&msg, peer).await.is_ok();
         }
     }
     false

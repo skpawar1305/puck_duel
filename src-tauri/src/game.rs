@@ -478,164 +478,108 @@ impl GameState {
         }
     }
 
-    fn net_msg(&self) -> Option<String> {
+    fn net_msg(&self) -> Option<Vec<u8>> {
         if self.is_single { return None; }
-        // Always send puck + isHostAuth every packet.
-        // Also send audio event flags so peer can play sounds.
+        let mut buf = Vec::with_capacity(33);
+        let msg_type = if self.is_host { 1u8 } else { 0u8 };
+        buf.push(msg_type);
+        buf.push(network::PROTOCOL_VERSION as u8);
+        
+        let paddle_x = if self.is_host { self.host_paddle.x } else { self.client_paddle.x };
+        let paddle_y = if self.is_host { self.host_paddle.y } else { self.client_paddle.y };
+        buf.extend_from_slice(&paddle_x.to_le_bytes());
+        buf.extend_from_slice(&paddle_y.to_le_bytes());
+        
+        buf.extend_from_slice(&self.puck.x.to_le_bytes());
+        buf.extend_from_slice(&self.puck.y.to_le_bytes());
+        buf.extend_from_slice(&self.puck.vx.to_le_bytes());
+        buf.extend_from_slice(&self.puck.vy.to_le_bytes());
+        
+        buf.push(self.score[0] as u8);
+        buf.push(self.score[1] as u8);
+        buf.extend_from_slice(&self.countdown.to_le_bytes());
+        
         let is_host_auth = if self.is_host { self.prev_auth } else { !self.prev_auth };
-        if self.is_host {
-            Some(serde_json::json!({
-                "type": "state",
-                "v": network::PROTOCOL_VERSION,
-                "hostPaddle": [self.host_paddle.x, self.host_paddle.y],
-                "puck":       [self.puck.x, self.puck.y],
-                "vel":        [self.puck.vx, self.puck.vy],
-                "score":      self.score,
-                "countdown":  self.countdown,
-                "isHostAuth": is_host_auth,
-                // Audio event flags
-                "hit":        self.hit,
-                "wall_hit":   self.wall_hit,
-                "goal_scored": self.goal_scored,
-            }).to_string())
-        } else {
-            Some(serde_json::json!({
-                "type": "input",
-                "v": network::PROTOCOL_VERSION,
-                "pos":        [self.client_paddle.x, self.client_paddle.y],
-                "puck":       [self.puck.x, self.puck.y],
-                "vel":        [self.puck.vx, self.puck.vy],
-                "score":      self.score,
-                "countdown":  self.countdown,
-                "isHostAuth": is_host_auth,
-                // Audio event flags
-                "hit":        self.hit,
-                "wall_hit":   self.wall_hit,
-                "goal_scored": self.goal_scored,
-            }).to_string())
-        }
+        let mut flags = 0u8;
+        if is_host_auth { flags |= 0x01; }
+        if self.hit > 0 { flags |= 0x02; }
+        if self.wall_hit > 0 { flags |= 0x04; }
+        if self.goal_scored > 0 { flags |= 0x08; }
+        buf.push(flags);
+        
+        Some(buf)
     }
 
-    fn apply_net(&mut self, msg: &str) {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(msg) else {
-            log::error!("Failed to parse network message: {}", msg);
-            return;
-        };
-        // Check for protocol version match
-        if let Some(msg_version) = v["v"].as_u64() {
-            if msg_version as u32 != network::PROTOCOL_VERSION {
-                self.version_mismatch = true;
-                return;
-            }
-        } else {
-            // No version means old client
+    fn apply_net(&mut self, msg: &[u8]) {
+        if msg.len() < 33 { return; }
+
+        if msg[1] as u32 != network::PROTOCOL_VERSION {
             self.version_mismatch = true;
             return;
         }
 
-        // isHostAuth: true = host is currently authoritative
-        let is_host_auth = v["isHostAuth"].as_bool().unwrap_or(true);
-        // Detect authority transitions — on a handoff, always accept puck data even
-        // if the sender just dropped authority. This ensures packet loss of the last
-        // auth packet doesn't cause a permanent deadlock: the first non-auth packet
-        // from the old owner still delivers the crossing position.
+        let msg_type = msg[0];
+        let mut b = [0u8; 4];
+        let mut read_f32 = |offset: usize| {
+            b.copy_from_slice(&msg[offset..offset+4]);
+            f32::from_le_bytes(b)
+        };
+
+        let px = read_f32(2);
+        let py = read_f32(6);
+        let puck_x = read_f32(10);
+        let puck_y = read_f32(14);
+        let puck_vx = read_f32(18);
+        let puck_vy = read_f32(22);
+        let recv_score = [msg[26] as u32, msg[27] as u32];
+        let countdown_val = read_f32(28);
+        
+        let flags = msg[32];
+        let is_host_auth = (flags & 0x01) != 0;
+        let recv_hit = (flags & 0x02) != 0;
+        let recv_wall_hit = (flags & 0x04) != 0;
+        let recv_goal_scored = (flags & 0x08) != 0;
+
         let auth_changed = is_host_auth != self.prev_recv_host_auth;
         self.prev_recv_host_auth = is_host_auth;
 
-        // Parse received score for use in both branches (needed for stale-packet guard)
-        let recv_score = v["score"].as_array().map(|s| [
-            s[0].as_u64().unwrap_or(0) as u32,
-            s[1].as_u64().unwrap_or(0) as u32,
-        ]);
-        // A packet is from a past round if its score sum is less than ours — any countdown
-        // value in it predates the current goal and must be ignored to prevent a post-goal
-        // countdown=2.5 from being overwritten by a stale countdown=0.
-        let recv_sum   = recv_score.map_or(0, |s| s[0] + s[1]);
-        let local_sum  = self.score[0] + self.score[1];
+        let recv_sum = recv_score[0] + recv_score[1];
+        let local_sum = self.score[0] + self.score[1];
         let fresh_round = recv_sum >= local_sum;
 
-        // Parse audio event flags from peer
-        let recv_hit = v["hit"].as_u64().map(|n| n as u8).unwrap_or(0);
-        let recv_wall_hit = v["wall_hit"].as_u64().map(|n| n as u8).unwrap_or(0);
-        let recv_goal_scored = v["goal_scored"].as_u64().map(|n| n as u8).unwrap_or(0);
+        if self.is_host && msg_type == 0 {
+            self.target_opponent = [px, py];
+            self.score[0] = self.score[0].max(recv_score[0]);
+            self.score[1] = self.score[1].max(recv_score[1]);
 
-        if self.is_host && v["type"] == "input" {
-            if let Some(pos) = v["pos"].as_array() {
-                self.target_opponent = [pos[0].as_f64().unwrap_or(0.0) as f32,
-                                        pos[1].as_f64().unwrap_or(0.0) as f32];
-            }
-            // Score always applies via max (safe — can only increase)
-            if let Some(s) = recv_score {
-                self.score[0] = self.score[0].max(s[0]);
-                self.score[1] = self.score[1].max(s[1]);
-            }
-            // Accept puck+countdown from client when: client is auth (!is_host_auth)
-            // OR authority just changed. Ignore stale-round puck packets so an
-            // old pre-goal state cannot pull us away from center after scoring.
             if !is_host_auth || auth_changed {
                 if fresh_round {
-                    if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                        self.target_puck = Puck {
-                            x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                            y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                            vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                            vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                        };
-                    }
-                }
-                // Sync countdown from auth freely, but reject stale pre-goal packets
-                // (those have recv_sum < local_sum and would carry countdown=0 after a goal).
-                if fresh_round {
-                    if let Some(c) = v["countdown"].as_f64() {
-                        let c = c as f32;
-                        if c > self.countdown + 1.0 || c < self.countdown {
-                            self.countdown = c;
-                        }
+                    self.target_puck = Puck { x: puck_x, y: puck_y, vx: puck_vx, vy: puck_vy };
+                    if countdown_val > self.countdown + 1.0 || countdown_val < self.countdown {
+                        self.countdown = countdown_val;
                     }
                 }
             }
-            // Apply audio events from peer (always accept — they're one-frame events)
-            if recv_hit != 0 { self.hit = 1; }
-            if recv_wall_hit != 0 { self.wall_hit = 1; }
-            if recv_goal_scored != 0 { self.goal_scored = 1; }
-        } else if !self.is_host && v["type"] == "state" {
-            if let Some(hp) = v["hostPaddle"].as_array() {
-                self.target_opponent = [hp[0].as_f64().unwrap_or(0.0) as f32,
-                                        hp[1].as_f64().unwrap_or(0.0) as f32];
+            if recv_hit { self.hit = 1; }
+            if recv_wall_hit { self.wall_hit = 1; }
+            if recv_goal_scored { self.goal_scored = 1; }
+        } else if !self.is_host && msg_type == 1 {
+            self.target_opponent = [px, py];
+            if fresh_round {
+                self.score[0] = self.score[0].max(recv_score[0]);
+                self.score[1] = self.score[1].max(recv_score[1]);
             }
-            // Score always applies via max
-            if let Some(s) = recv_score {
-                self.score[0] = self.score[0].max(s[0]);
-                self.score[1] = self.score[1].max(s[1]);
-            }
-            // Accept puck+countdown from host when: host is auth (is_host_auth)
-            // OR authority just changed. Ignore stale-round puck packets so an
-            // old pre-goal state cannot pull us away from center after scoring.
             if is_host_auth || auth_changed {
                 if fresh_round {
-                    if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
-                        self.target_puck = Puck {
-                            x:  p[0].as_f64().unwrap_or(0.0) as f32,
-                            y:  p[1].as_f64().unwrap_or(0.0) as f32,
-                            vx: vel[0].as_f64().unwrap_or(0.0) as f32,
-                            vy: vel[1].as_f64().unwrap_or(0.0) as f32,
-                        };
-                    }
-                }
-                // Sync countdown from auth freely, but reject stale pre-goal packets
-                if fresh_round {
-                    if let Some(c) = v["countdown"].as_f64() {
-                        let c = c as f32;
-                        if c > self.countdown + 1.0 || c < self.countdown {
-                            self.countdown = c;
-                        }
+                    self.target_puck = Puck { x: puck_x, y: puck_y, vx: puck_vx, vy: puck_vy };
+                    if countdown_val > self.countdown + 1.0 || countdown_val < self.countdown {
+                        self.countdown = countdown_val;
                     }
                 }
             }
-            // Apply audio events from peer (always accept — they're one-frame events)
-            if recv_hit != 0 { self.hit = 1; }
-            if recv_wall_hit != 0 { self.wall_hit = 1; }
-            if recv_goal_scored != 0 { self.goal_scored = 1; }
+            if recv_hit { self.hit = 1; }
+            if recv_wall_hit { self.wall_hit = 1; }
+            if recv_goal_scored { self.goal_scored = 1; }
         }
     }
 }
@@ -720,7 +664,7 @@ pub async fn start_game(
                     let peer_opt: Option<SocketAddr> = { udp_peer.lock().await.clone() };
                     if let Some(peer) = peer_opt {
                         if let Some(sock) = &*udp_socket.lock().await {
-                            let _ = sock.send_to(msg.as_bytes(), peer).await;
+                            let _ = sock.send_to(&msg, peer).await;
                         }
                     }
                 } else {
@@ -728,7 +672,7 @@ pub async fn start_game(
                     let peer_guard = webrtc_peer_id.lock().await;
                     if let (Some(socket), Some(peer)) = (socket_guard.as_mut(), peer_guard.as_ref()) {
                         if let Ok(channel) = socket.get_channel_mut(0) {
-                            let packet = Packet::from(msg.into_bytes());
+                            let packet = Packet::from(msg);
                             let _ = channel.send(packet, *peer);
                         }
                     }
@@ -782,32 +726,22 @@ mod tests {
         GameState::new(is_host, is_single)
     }
 
-    #[test]
+#[test]
     fn test_host_net_msg_format() {
         let gs = create_test_gamestate(true, false);
         let msg = gs.net_msg().expect("Should produce a message");
-        
-        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
-        assert_eq!(v["type"], "state");
-        assert!(v["hostPaddle"].is_array());
-        assert!(v["puck"].is_array());
-        assert!(v["vel"].is_array());
-        assert!(v["score"].is_array());
-        assert!(v["isHostAuth"].is_boolean());
+        assert_eq!(msg.len(), 33);
+        assert_eq!(msg[0], 1); // type = state
+        assert_eq!(msg[1], network::PROTOCOL_VERSION as u8);
     }
 
     #[test]
     fn test_client_net_msg_format() {
         let gs = create_test_gamestate(false, false);
         let msg = gs.net_msg().expect("Should produce a message");
-        
-        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
-        assert_eq!(v["type"], "input");
-        assert!(v["pos"].is_array());
-        assert!(v["puck"].is_array());
-        assert!(v["vel"].is_array());
-        assert!(v["score"].is_array());
-        assert!(v["isHostAuth"].is_boolean());
+        assert_eq!(msg.len(), 33);
+        assert_eq!(msg[0], 0); // type = input
+        assert_eq!(msg[1], network::PROTOCOL_VERSION as u8);
     }
 
     #[test]
@@ -816,19 +750,26 @@ mod tests {
         assert!(gs.net_msg().is_none());
     }
 
+    fn build_test_packet(msg_type: u8, px: f32, py: f32, puck_x: f32, puck_y: f32, vx: f32, vy: f32, s0: u8, s1: u8, count: f32, flags: u8) -> Vec<u8> {
+        let mut buf = vec![msg_type, network::PROTOCOL_VERSION as u8];
+        buf.extend_from_slice(&px.to_le_bytes());
+        buf.extend_from_slice(&py.to_le_bytes());
+        buf.extend_from_slice(&puck_x.to_le_bytes());
+        buf.extend_from_slice(&puck_y.to_le_bytes());
+        buf.extend_from_slice(&vx.to_le_bytes());
+        buf.extend_from_slice(&vy.to_le_bytes());
+        buf.push(s0);
+        buf.push(s1);
+        buf.extend_from_slice(&count.to_le_bytes());
+        buf.push(flags);
+        buf
+    }
+
     #[test]
     fn test_apply_net_parses_host_state() {
         let mut gs = create_test_gamestate(false, false); // client
-        let msg = json!({
-            "type": "state",
-            "v": 2,
-            "hostPaddle": [120.0, 150.0],
-            "puck": [180.0, 180.0],
-            "vel": [10.0, -10.0],
-            "score": [1, 0],
-            "countdown": 0.0,
-            "isHostAuth": true
-        }).to_string();
+        // type=1(state), paddle=(120, 150), puck=(180, 180), v=(10, -10), score=[1,0], count=0, flags=1(isHostAuth)
+        let msg = build_test_packet(1, 120.0, 150.0, 180.0, 180.0, 10.0, -10.0, 1, 0, 0.0, 1);
         
         gs.apply_net(&msg);
         
@@ -841,16 +782,8 @@ mod tests {
     #[test]
     fn test_apply_net_parses_client_input() {
         let mut gs = create_test_gamestate(true, false); // host
-        let msg = json!({
-            "type": "input",
-            "v": 2,
-            "pos": [150.0, 100.0],
-            "puck": [50.0, 60.0],
-            "vel": [10.0, -5.0],
-            "score": [0, 1],
-            "countdown": 1.5,
-            "isHostAuth": false
-        }).to_string();
+        // type=0(input), paddle=(150, 100), flags=0(!isHostAuth)
+        let msg = build_test_packet(0, 150.0, 100.0, 50.0, 60.0, 10.0, -5.0, 0, 1, 1.5, 0);
         
         gs.apply_net(&msg);
         
@@ -861,13 +794,10 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_net_rejects_malformed_json() {
+    fn test_apply_net_rejects_malformed() {
         let mut gs = create_test_gamestate(true, false);
         let initial_score = gs.score;
-        
-        gs.apply_net("not valid json");
-        
-        // Score should be unchanged (silent failure with log)
+        gs.apply_net(b"short packet");
         assert_eq!(gs.score, initial_score);
     }
 
@@ -876,15 +806,8 @@ mod tests {
         let mut gs = create_test_gamestate(true, false);
         gs.score = [2, 1]; // Local score
         
-        // Remote has higher score for client
-        let msg = json!({
-            "type": "input",
-            "v": 2,
-            "pos": [100.0, 100.0],
-            "score": [1, 3],
-            "isHostAuth": true
-        }).to_string();
-        
+        // type=0, remote has [1, 3]
+        let msg = build_test_packet(0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0, 1, 3, 0.0, 1);
         gs.apply_net(&msg);
         
         // Should take max: [2, 3]
@@ -896,19 +819,11 @@ mod tests {
     fn test_stale_packet_guard() {
         let mut gs = create_test_gamestate(false, false);
         gs.score = [1, 0]; // Local already scored
+        gs.countdown = 2.5; // Post-goal countdown
         
         // Stale packet from before goal (score sum 0 < 1)
-        let stale_msg = json!({
-            "type": "state",
-            "hostPaddle": [100.0, 200.0],
-            "puck": [50.0, 60.0],
-            "vel": [10.0, -5.0],
-            "score": [0, 0],
-            "countdown": 0.0,
-            "isHostAuth": false
-        }).to_string();
+        let stale_msg = build_test_packet(1, 100.0, 200.0, 50.0, 60.0, 10.0, -5.0, 0, 0, 0.0, 0);
         
-        gs.countdown = 2.5; // Post-goal countdown
         gs.apply_net(&stale_msg);
         
         // Countdown should NOT be overwritten by stale packet
@@ -920,17 +835,13 @@ mod tests {
         let mut gs_host = create_test_gamestate(true, false);
         let mut gs_client = create_test_gamestate(false, false);
         
-        // Puck in host half - host should be authoritative
         gs_host.puck.y = TH - 100.0;
         gs_client.puck.y = TH - 100.0;
-        
         assert!(gs_host.auth());
         assert!(!gs_client.auth());
         
-        // Puck in client half - client should be authoritative
         gs_host.puck.y = 100.0;
         gs_client.puck.y = 100.0;
-        
         assert!(!gs_host.auth());
         assert!(gs_client.auth());
     }
@@ -940,7 +851,6 @@ mod tests {
         let mut gs = create_test_gamestate(true, true);
         gs.puck.y = 100.0;
         assert!(gs.auth());
-        
         gs.puck.y = TH - 100.0;
         assert!(gs.auth());
     }
