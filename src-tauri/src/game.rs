@@ -206,6 +206,15 @@ impl GameState {
                         (self.puck.y - ai::BLOCK_DISTANCE).clamp(PAR, TH / 2.0 - PAR / 2.0)
                     };
                     (ai::INTERCEPT_SPEED, pred_x, ty)
+                } else if puck_in_half {
+                    // Puck is in AI half but not approaching (e.g. stopped after spawn, or moving slow/sideways)
+                    if apy < self.puck.y - 12.0 {
+                        // AI is behind it, strike it downward!
+                        (ai::INTERCEPT_SPEED, self.puck.x, self.puck.y + 20.0)
+                    } else {
+                        // AI is dangerously low or alongside, move up behind the puck to avoid own-goals
+                        (ai::INTERCEPT_SPEED, self.puck.x, (self.puck.y - 35.0).max(PAR))
+                    }
                 } else {
                     // Puck in host half or not approaching — return to centered defensive home
                     (ai::RETURN_SPEED, TW / 2.0, ai::HOME_Y)
@@ -775,7 +784,7 @@ mod tests {
 
     #[test]
     fn test_host_net_msg_format() {
-        let mut gs = create_test_gamestate(true, false);
+        let gs = create_test_gamestate(true, false);
         let msg = gs.net_msg().expect("Should produce a message");
         
         let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
@@ -789,7 +798,7 @@ mod tests {
 
     #[test]
     fn test_client_net_msg_format() {
-        let mut gs = create_test_gamestate(false, false);
+        let gs = create_test_gamestate(false, false);
         let msg = gs.net_msg().expect("Should produce a message");
         
         let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
@@ -840,7 +849,7 @@ mod tests {
             "vel": [10.0, -5.0],
             "score": [0, 1],
             "countdown": 1.5,
-            "isHostAuth": true
+            "isHostAuth": false
         }).to_string();
         
         gs.apply_net(&msg);

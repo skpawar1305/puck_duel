@@ -962,28 +962,6 @@
     wallFlash: number,
   ) {
     g.clear();
-    const pulse = 0.5 + (Math.sin(now * 0.016) + 1) * 0.25;
-    const ringR = PAR + 6.5 + pulse * 1.8;
-
-    g.circle(blue[0], blue[1], ringR).stroke({
-      width: 2,
-      color: 0x60a5fa,
-      alpha: 0.28 + wallFlash * 0.24,
-    });
-    g.circle(blue[0], blue[1], PAR * 0.56).fill({
-      color: 0x93c5fd,
-      alpha: 0.12 + wallFlash * 0.08,
-    });
-
-    g.circle(green[0], green[1], ringR).stroke({
-      width: 2,
-      color: 0x34d399,
-      alpha: 0.28 + wallFlash * 0.24,
-    });
-    g.circle(green[0], green[1], PAR * 0.56).fill({
-      color: 0x6ee7b7,
-      alpha: 0.12 + wallFlash * 0.08,
-    });
   }
 
   function drawPaddleDecals(
