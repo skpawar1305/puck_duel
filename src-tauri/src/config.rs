@@ -29,6 +29,16 @@ pub const MAX_SPEED: f32 = 950.0;
 /// Minimum puck speed after paddle hit (ensures satisfying shots)
 pub const MIN_HIT_SPEED: f32 = 250.0;
 
+/// Goal post radius (pixels) — posts are physical pegs, not point colliders
+pub const GOAL_POST_RADIUS: f32 = 6.0;
+
+/// Tangential surface friction applied during paddle–puck collision
+/// Transfers a fraction of paddle spin/lateral motion to the puck
+pub const PADDLE_SURFACE_FRICTION: f32 = 0.20;
+
+/// Below this speed (px/s), puck is treated as stopped to avoid infinite crawl
+pub const MIN_PUCK_SPEED: f32 = 2.0;
+
 /// Paddle hit power multiplier (how much paddle velocity transfers to puck)
 pub const PADDLE_POWER: f32 = 1.25;
 

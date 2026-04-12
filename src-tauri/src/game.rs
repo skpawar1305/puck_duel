@@ -323,7 +323,10 @@ impl GameState {
                 // Avoid double damping while handoff interpolation is still active.
                 if self.handoff_blend >= 1.0 {
                     let sp = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-                    if sp > 0.0 {
+                    if sp <= MIN_PUCK_SPEED {
+                        self.puck.vx = 0.0;
+                        self.puck.vy = 0.0;
+                    } else {
                         let loss = (FRICTION * sp * sub_dt).min(sp);
                         self.puck.vx -= self.puck.vx/sp * loss;
                         self.puck.vy -= self.puck.vy/sp * loss;
@@ -402,7 +405,10 @@ impl GameState {
             self.puck.x += self.puck.vx * dt;
             self.puck.y += self.puck.vy * dt;
             let sp2 = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
-            if sp2 > 0.0 {
+            if sp2 <= MIN_PUCK_SPEED {
+                self.puck.vx = 0.0;
+                self.puck.vy = 0.0;
+            } else {
                 let loss = (FRICTION * sp2 * dt).min(sp2);
                 self.puck.vx -= self.puck.vx/sp2*loss; self.puck.vy -= self.puck.vy/sp2*loss;
             }

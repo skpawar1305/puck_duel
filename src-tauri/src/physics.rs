@@ -67,14 +67,12 @@ pub fn collide_paddle_puck(puck: &mut Puck, pad: &Paddle) -> bool {
         // Pure elastic reflection with scaled paddle power restitution
         puck.vx -= dot * nx * (1.0 + PADDLE_POWER);
         puck.vy -= dot * ny * (1.0 + PADDLE_POWER);
-        
-        // Apply slight tangential surface friction (grab)
-        // This transfers a percentage of the paddle's tangential speed to the puck
+
+        // Apply tangential surface friction (spin/grab transfer)
         let tan_vel = rel_vx * (-ny) + rel_vy * nx;
-        let tan_friction = 0.20;
-        puck.vx -= tan_vel * tan_friction * (-ny);
-        puck.vy -= tan_vel * tan_friction * nx;
-        
+        puck.vx -= tan_vel * PADDLE_SURFACE_FRICTION * (-ny);
+        puck.vy -= tan_vel * PADDLE_SURFACE_FRICTION * nx;
+
         true
     } else {
         false
@@ -117,14 +115,15 @@ pub fn collide_goal_post(puck: &mut Puck, px: f32, py: f32) -> bool {
     let dx = puck.x - px;
     let dy = puck.y - py;
     let d = (dx * dx + dy * dy).sqrt();
+    let min_d = PUCK_RADIUS + GOAL_POST_RADIUS;
 
-    if d >= PUCK_RADIUS || d < 0.001 {
+    if d >= min_d || d < 0.001 {
         return false;
     }
 
     let (nx, ny) = (dx / d, dy / d);
-    puck.x = px + nx * PUCK_RADIUS;
-    puck.y = py + ny * PUCK_RADIUS;
+    puck.x = px + nx * min_d;
+    puck.y = py + ny * min_d;
 
     let dot = puck.vx * nx + puck.vy * ny;
     if dot < 0.0 {
@@ -139,11 +138,14 @@ pub fn collide_goal_post(puck: &mut Puck, px: f32, py: f32) -> bool {
 /// Apply friction to puck velocity
 pub fn apply_friction(puck: &mut Puck, dt: f32) {
     let sp = puck.speed();
-    if sp > 0.0 {
-        let loss = (FRICTION * sp * dt).min(sp);
-        puck.vx -= puck.vx / sp * loss;
-        puck.vy -= puck.vy / sp * loss;
+    if sp <= MIN_PUCK_SPEED {
+        puck.vx = 0.0;
+        puck.vy = 0.0;
+        return;
     }
+    let loss = (FRICTION * sp * dt).min(sp);
+    puck.vx -= puck.vx / sp * loss;
+    puck.vy -= puck.vy / sp * loss;
 }
 
 /// Clamp puck speed to maximum

@@ -88,6 +88,10 @@ fn spawn_socket_tasks(
         let mut event_handle = tokio::spawn({
             let socket = socket.clone();
             async move {
+                // Safety net: if the frontend missed the initial peer-connected event
+                // (e.g. the 15s timeout fired just as ICE completed), re-emit it the
+                // moment the first real game packet arrives from the peer.
+                let mut first_packet = true;
                 loop {
                     // Small sleep to avoid busy-waiting — keep this low to process
                     // network packets every frame for smooth multiplayer
@@ -121,6 +125,10 @@ fn spawn_socket_tasks(
                     if let Ok(channel) = socket.get_channel_mut(0) {
                         for (_peer, packet) in channel.receive() {
                             let _ = msg_tx.send(packet.to_vec());
+                            if first_packet {
+                                first_packet = false;
+                                let _ = app.emit("peer-connected", ());
+                            }
                         }
                     }
                 }

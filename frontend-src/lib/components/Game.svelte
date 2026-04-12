@@ -777,6 +777,10 @@
 
   function drawBorderRunners(g: Graphics, wf: number) {
     g.clear();
+    const topLeftSpan     = GX - CR;
+    const topRightSpan    = TW - CR - (GX + GOAL_W);
+    const bottomLeftSpan  = GX - CR;
+    const bottomRightSpan = TW - CR - (GX + GOAL_W);
     const xTopLeft = CR + 0.5 * topLeftSpan;
     const xTopRight = GX + GOAL_W + 0.5 * topRightSpan;
     const xBottomRight = GX + GOAL_W + 0.5 * bottomRightSpan;
