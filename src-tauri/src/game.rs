@@ -636,6 +636,7 @@ pub async fn start_game(
         let mut last     = Instant::now();
         let mut accumulator = 0.0;
         const TIME_STEP: f32 = 1.0 / 120.0; // Fixed 120Hz physics
+        let mut last_ptr = *pointer.lock().unwrap();
 
         while running.load(Ordering::Relaxed) {
             interval.tick().await;
@@ -659,10 +660,20 @@ pub async fn start_game(
             }
 
             // Physics fixed-step tick
-            let ptr = *pointer.lock().unwrap();
-            while accumulator >= TIME_STEP {
-                gs.update(TIME_STEP, ptr);
-                accumulator -= TIME_STEP;
+            let final_ptr = *pointer.lock().unwrap();
+            let steps = (accumulator / TIME_STEP).floor() as usize;
+            if steps > 0 {
+                let dx = (final_ptr[0] - last_ptr[0]) / (steps as f32);
+                let dy = (final_ptr[1] - last_ptr[1]) / (steps as f32);
+                for i in 1..=steps {
+                    let cur_ptr = [
+                        last_ptr[0] + dx * (i as f32),
+                        last_ptr[1] + dy * (i as f32),
+                    ];
+                    gs.update(TIME_STEP, cur_ptr);
+                    accumulator -= TIME_STEP;
+                }
+                last_ptr = final_ptr;
             }
 
             if let Some(msg) = gs.net_msg() {

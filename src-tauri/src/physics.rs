@@ -64,17 +64,16 @@ pub fn collide_paddle_puck(puck: &mut Puck, pad: &Paddle) -> bool {
     let dot = rel_vx * nx + rel_vy * ny;
     
     if dot < 0.0 {
-        // Reflect and add power
-        puck.vx = puck.vx - dot * nx * (1.0 + WALL_REST) + pad.pvx * PADDLE_POWER;
-        puck.vy = puck.vy - dot * ny * (1.0 + WALL_REST) + pad.pvy * PADDLE_POWER;
+        // Pure elastic reflection with scaled paddle power restitution
+        puck.vx -= dot * nx * (1.0 + PADDLE_POWER);
+        puck.vy -= dot * ny * (1.0 + PADDLE_POWER);
         
-        // Ensure minimum hit speed for satisfying shots
-        let speed = (puck.vx * puck.vx + puck.vy * puck.vy).sqrt();
-        if speed < MIN_HIT_SPEED {
-            let scale = MIN_HIT_SPEED / speed.max(0.001);
-            puck.vx *= scale;
-            puck.vy *= scale;
-        }
+        // Apply slight tangential surface friction (grab)
+        // This transfers a percentage of the paddle's tangential speed to the puck
+        let tan_vel = rel_vx * (-ny) + rel_vy * nx;
+        let tan_friction = 0.20;
+        puck.vx -= tan_vel * tan_friction * (-ny);
+        puck.vy -= tan_vel * tan_friction * nx;
         
         true
     } else {
