@@ -143,8 +143,13 @@ impl GameState {
         self.host_is_authoritative() == self.is_host
     }
 
-    fn reset_puck(&mut self) {
-        self.puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
+    fn reset_puck(&mut self, loser: Option<usize>) {
+        let y = match loser {
+            Some(0) => TH * 0.75,
+            Some(1) => TH * 0.25,
+            _ => TH / 2.0,
+        };
+        self.puck = Puck { x: TW / 2.0, y, vx: 0.0, vy: 0.0 };
     }
 
     fn update(&mut self, dt: f32, ptr: [f32; 2]) {
@@ -359,11 +364,11 @@ impl GameState {
             if self.puck.y < 0.0 {
                 self.score[0] += 1; self.goal_scored = 1;
                 self.goal_flash = 1.0; self.score_flash[0] = 1.0;
-                self.reset_puck(); self.countdown = 2.5;
+                self.reset_puck(Some(1)); self.countdown = 2.5;
             } else if self.puck.y > TH {
                 self.score[1] += 1; self.goal_scored = 1;
                 self.goal_flash = 1.0; self.score_flash[1] = 1.0;
-                self.reset_puck(); self.countdown = 2.5;
+                self.reset_puck(Some(0)); self.countdown = 2.5;
             }
 
             // Echo authoritative puck into target_puck so the next ownership
@@ -399,12 +404,13 @@ impl GameState {
                 if      self.puck.y < PR    { self.puck.y = PR;    self.puck.vy =  self.puck.vy.abs()*WALL_REST; }
                 else if self.puck.y > TH-PR { self.puck.y = TH-PR; self.puck.vy = -self.puck.vy.abs()*WALL_REST; }
             }
-            // Dead-reckoned puck passed a goal — snap to center immediately;
+            // Dead-reckoned puck passed a goal — snap back immediately;
             // auth side will send the score + reset shortly via net.
             if self.puck.y < 0.0 || self.puck.y > TH {
-                self.reset_puck();
+                let loser = if self.puck.y < 0.0 { 1 } else { 0 };
+                self.reset_puck(Some(loser));
                 self.countdown = 2.5; // prevent physics running before auth side confirms reset
-                self.target_puck = Puck { x:TW/2.0, y:TH/2.0, vx:0.0, vy:0.0 };
+                self.target_puck = self.puck.clone();
             }
 
             // Blend toward authoritative peer state with adaptive dead reckoning
@@ -416,9 +422,11 @@ impl GameState {
             let blend = (err / interpolation::ADAPTIVE_ERROR_THRESHOLD)
                 .clamp(interpolation::MIN_BLEND, interpolation::MAX_BLEND);
 
-            // If peer already reset puck to center (after goal), snap immediately
+            // If peer already reset puck (after goal), snap immediately
+            let target_y = self.target_puck.y;
+            let center_or_side = (target_y - TH/2.0).abs() < 10.0 || (target_y - TH*0.25).abs() < 10.0 || (target_y - TH*0.75).abs() < 10.0;
             let peer_reset = (self.target_puck.x - TW/2.0).abs() < 10.0
-                && (self.target_puck.y - TH/2.0).abs() < 10.0
+                && center_or_side
                 && self.target_puck.vx.abs() < 1.0
                 && self.target_puck.vy.abs() < 1.0;
             if peer_reset || err > interpolation::DEAD_RECKONING_SNAP_THRESHOLD {
@@ -536,7 +544,6 @@ impl GameState {
         let recv_sum   = recv_score.map_or(0, |s| s[0] + s[1]);
         let local_sum  = self.score[0] + self.score[1];
         let fresh_round = recv_sum >= local_sum;
-        let near_handoff_band = (self.puck.y - TH / 2.0).abs() <= AUTH_HYSTERESIS * 2.0;
 
         // Parse audio event flags from peer
         let recv_hit = v["hit"].as_u64().map(|n| n as u8).unwrap_or(0);
@@ -556,7 +563,7 @@ impl GameState {
             // Accept puck+countdown from client when: client is auth (!is_host_auth)
             // OR authority just changed. Ignore stale-round puck packets so an
             // old pre-goal state cannot pull us away from center after scoring.
-            if !is_host_auth || auth_changed || near_handoff_band {
+            if !is_host_auth || auth_changed {
                 if fresh_round {
                     if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
                         self.target_puck = Puck {
@@ -570,7 +577,12 @@ impl GameState {
                 // Sync countdown from auth freely, but reject stale pre-goal packets
                 // (those have recv_sum < local_sum and would carry countdown=0 after a goal).
                 if fresh_round {
-                    if let Some(c) = v["countdown"].as_f64() { self.countdown = c as f32; }
+                    if let Some(c) = v["countdown"].as_f64() {
+                        let c = c as f32;
+                        if c > self.countdown + 1.0 || c < self.countdown {
+                            self.countdown = c;
+                        }
+                    }
                 }
             }
             // Apply audio events from peer (always accept — they're one-frame events)
@@ -590,7 +602,7 @@ impl GameState {
             // Accept puck+countdown from host when: host is auth (is_host_auth)
             // OR authority just changed. Ignore stale-round puck packets so an
             // old pre-goal state cannot pull us away from center after scoring.
-            if is_host_auth || auth_changed || near_handoff_band {
+            if is_host_auth || auth_changed {
                 if fresh_round {
                     if let (Some(p), Some(vel)) = (v["puck"].as_array(), v["vel"].as_array()) {
                         self.target_puck = Puck {
@@ -603,7 +615,12 @@ impl GameState {
                 }
                 // Sync countdown from auth freely, but reject stale pre-goal packets
                 if fresh_round {
-                    if let Some(c) = v["countdown"].as_f64() { self.countdown = c as f32; }
+                    if let Some(c) = v["countdown"].as_f64() {
+                        let c = c as f32;
+                        if c > self.countdown + 1.0 || c < self.countdown {
+                            self.countdown = c;
+                        }
+                    }
                 }
             }
             // Apply audio events from peer (always accept — they're one-frame events)

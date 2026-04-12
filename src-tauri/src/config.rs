@@ -18,7 +18,7 @@ pub const PUCK_RADIUS: f32 = 20.0;
 pub const PADDLE_RADIUS: f32 = 27.0;
 
 /// Goal width (center gap where puck can score)
-pub const GOAL_WIDTH: f32 = 110.0;
+pub const GOAL_WIDTH: f32 = 150.0;
 
 /// Corner fillet radius (rounded corners of the table)
 pub const CORNER_RADIUS: f32 = 42.0;

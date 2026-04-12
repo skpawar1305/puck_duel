@@ -64,13 +64,9 @@ pub fn collide_paddle_puck(puck: &mut Puck, pad: &Paddle) -> bool {
     let dot = rel_vx * nx + rel_vy * ny;
     
     if dot < 0.0 {
-        // Add paddle power to the hit based on paddle velocity
-        let paddle_speed = (pad.pvx * pad.pvx + pad.pvy * pad.pvy).sqrt();
-        let power_bonus = paddle_speed * PADDLE_POWER;
-        
         // Reflect and add power
-        puck.vx = -dot * nx * (1.0 + WALL_REST) + pad.pvx * PADDLE_POWER;
-        puck.vy = -dot * ny * (1.0 + WALL_REST) + pad.pvy * PADDLE_POWER;
+        puck.vx = puck.vx - dot * nx * (1.0 + WALL_REST) + pad.pvx * PADDLE_POWER;
+        puck.vy = puck.vy - dot * ny * (1.0 + WALL_REST) + pad.pvy * PADDLE_POWER;
         
         // Ensure minimum hit speed for satisfying shots
         let speed = (puck.vx * puck.vx + puck.vy * puck.vy).sqrt();
