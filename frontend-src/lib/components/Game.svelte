@@ -768,7 +768,7 @@
     addBorderPath(g);
     g.stroke({ width: 1.2, color: COL.borderAccent, alpha: 0.24 + wf * 0.18 });
 
-    const orbAlpha = 0.35 + (Math.sin(t * 2) + 1) * 0.18 + wf * 0.28;
+    const orbAlpha = 0.35 + 0.18 + wf * 0.28;
     g.circle(CR, CR, 4.8).fill({ color: COL.blue, alpha: orbAlpha });
     g.circle(TW - CR, CR, 4.8).fill({ color: COL.green, alpha: orbAlpha });
     g.circle(CR, TH - CR, 4.8).fill({ color: COL.green, alpha: orbAlpha });
@@ -779,9 +779,8 @@
     g.clear();
     const xTopLeft = CR + 0.5 * topLeftSpan;
     const xTopRight = GX + GOAL_W + 0.5 * topRightSpan;
-    const xBottomRight =
-      GX + GOAL_W + (Math.sin(t + 3.1) + 1) * 0.5 * bottomRightSpan;
-    const xBottomLeft = CR + (Math.sin(t + 4.5) + 1) * 0.5 * bottomLeftSpan;
+    const xBottomRight = GX + GOAL_W + 0.5 * bottomRightSpan;
+    const xBottomLeft = CR + 0.5 * bottomLeftSpan;
 
     const a = 0.28 + wf * 0.34;
     g.circle(xTopLeft, 2.8, 3.4).fill({ color: COL.blue, alpha: a });
