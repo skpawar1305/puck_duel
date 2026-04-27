@@ -358,14 +358,12 @@ impl GameState {
                 sub_wall_hit |= collide_goal_post(&mut self.puck, GX,           TH);
                 sub_wall_hit |= collide_goal_post(&mut self.puck, GX+GOAL_W,    TH);
 
-                // Paddle collisions
-                let hp = self.host_paddle.clone();
-                let cp = self.client_paddle.clone();
-                if collide_paddle_puck(&mut self.puck, &hp) { sub_hit = true; }
-                if collide_paddle_puck(&mut self.puck, &cp) { sub_hit = true; }
+                // Paddle collisions — pass references to avoid clones
+            if collide_paddle_puck(&mut self.puck, &self.host_paddle) { sub_hit = true; }
+            if collide_paddle_puck(&mut self.puck, &self.client_paddle) { sub_hit = true; }
 
-                // Speed clamp (max only)
-                let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
+            // Speed clamp (max only) — reuse speed from handoff_blend check if available
+            let cs = (self.puck.vx*self.puck.vx + self.puck.vy*self.puck.vy).sqrt();
                 if cs > MAX_SPEED { self.puck.vx=self.puck.vx/cs*MAX_SPEED; self.puck.vy=self.puck.vy/cs*MAX_SPEED; }
             }
 
@@ -635,7 +633,8 @@ pub async fn start_game(
     };
 
     let handle = tokio::spawn(async move {
-        let mut gs       = GameState::new(is_host, is_single_player);
+        let mut gs = GameState::new(is_host, is_single_player);
+        gs.version_mismatch = false; // Reset version mismatch on new game
         let mut interval = tokio::time::interval(Duration::from_nanos(16_666_667));
         // Skip missed ticks to prevent spiral of death — keeps game smooth even if scheduler delays
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -646,10 +645,6 @@ pub async fn start_game(
 
         while running.load(Ordering::Relaxed) {
             interval.tick().await;
-            if paused.load(Ordering::Relaxed) {
-                last = Instant::now();
-                continue;
-            }
             let now = Instant::now();
             let dt  = now.duration_since(last).as_secs_f32().min(0.05); // cap at 50ms
             last = now;
@@ -663,6 +658,13 @@ pub async fn start_game(
                     Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => break,
                     Err(_) => break,
                 }
+            }
+
+            // Reset accumulator when paused so we don't get a physics jump on resume
+            if paused.load(Ordering::Relaxed) {
+                accumulator = 0.0;
+                last = Instant::now();
+                continue;
             }
 
             // Physics fixed-step tick

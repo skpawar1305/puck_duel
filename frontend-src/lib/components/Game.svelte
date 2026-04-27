@@ -70,7 +70,7 @@
     PAR = 27;
   const GOAL_W = 150;
   const CR = 42;
-  const MAX_SPEED = 990;
+  const MAX_SPEED = 950;
   const GX = (TW - GOAL_W) / 2;
 
   const COL = {

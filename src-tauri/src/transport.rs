@@ -23,7 +23,7 @@ pub struct WebRtcTransportState {
 
 impl WebRtcTransportState {
     pub fn new() -> Self {
-        let (msg_tx, _) = broadcast::channel(64);
+        let (msg_tx, _) = broadcast::channel(network::MSG_CHANNEL_CAPACITY);
         Self {
             socket: Arc::new(Mutex::new(None)),
             bg_task: Arc::new(Mutex::new(None)),
@@ -147,21 +147,8 @@ fn spawn_socket_tasks(
 /// Host an online game: create a WebRTC socket and wait for a peer.
 /// Returns the 4-digit room code to display to the user.
 /// Emits `peer-connected` when the first peer joins.
-#[tauri::command]
-pub async fn host_online(
-    transport: State<'_, WebRtcTransportState>,
-    app: AppHandle,
-) -> Result<String, String> {
-    // Generate room code
-    let code = WebRtcTransportState::generate_room_code();
-    let room_url = WebRtcTransportState::room_url(&code)?;
-
-    eprintln!("🌍 [host_online] Starting with room code: {}", code);
-    eprintln!("🌍 [host_online] Room URL: {}", room_url);
-
-    // Create WebRTC socket using builder with multiple STUN servers for better connectivity
-    eprintln!("🌍 [host_online] Creating WebRTC socket...");
-    let ice_config = RtcIceServerConfig {
+fn default_ice_config() -> RtcIceServerConfig {
+    RtcIceServerConfig {
         urls: vec![
             "stun:stun.l.google.com:19302".into(),
             "stun:stun1.l.google.com:19302".into(),
@@ -171,44 +158,45 @@ pub async fn host_online(
             "stun:stun.cloudflare.com:3478".into(),
         ],
         ..Default::default()
-    };
+    }
+}
+
+#[tauri::command]
+pub async fn host_online(
+    transport: State<'_, WebRtcTransportState>,
+    app: AppHandle,
+) -> Result<String, String> {
+    let code = WebRtcTransportState::generate_room_code();
+    let room_url = WebRtcTransportState::room_url(&code)?;
+
+    info!("host_online: starting with room code {}", code);
+
+    let ice_config = default_ice_config();
     let (socket, message_loop) = WebRtcSocketBuilder::new(&room_url)
         .add_channel(ChannelConfig::unreliable())
         .ice_server(ice_config)
         .build();
-    eprintln!("🌍 [host_online] WebRTC socket created successfully");
 
-    // Prepare data for spawning tasks
     let msg_tx = transport.msg_tx.clone();
     let peer_id = transport.peer_id.clone();
-    
-    // Store socket and room ID (drop the guard immediately after)
-    eprintln!("🌍 [host_online] Storing socket in state...");
+
     {
         let mut socket_guard = transport.socket.lock().await;
         *socket_guard = Some(socket);
-        drop(socket_guard);
     }
     {
         let mut room_id_guard = transport.room_id.lock().await;
         *room_id_guard = Some(code.clone());
-        drop(room_id_guard);
     }
-    eprintln!("🌍 [host_online] Socket stored");
 
-    // Spawn combined driver and event loop tasks
     let socket_arc = transport.socket.clone();
-    eprintln!("🌍 [host_online] Spawning socket tasks...");
     let handle = spawn_socket_tasks(socket_arc, message_loop, msg_tx, peer_id, app);
-    
+
     {
         let mut bg_task_guard = transport.bg_task.lock().await;
         *bg_task_guard = Some(handle);
-        drop(bg_task_guard);
     }
-    eprintln!("🌍 [host_online] Socket tasks spawned");
 
-    eprintln!("🌍 [host_online] Returning room code to frontend");
     Ok(code)
 }
 
@@ -225,18 +213,7 @@ pub async fn join_online(
 
     info!("Joining online game with room code: {}", code);
 
-    // Create WebRTC socket using builder with multiple STUN servers for better connectivity
-    let ice_config = RtcIceServerConfig {
-        urls: vec![
-            "stun:stun.l.google.com:19302".into(),
-            "stun:stun1.l.google.com:19302".into(),
-            "stun:stun2.l.google.com:19302".into(),
-            "stun:stun3.l.google.com:19302".into(),
-            "stun:stun4.l.google.com:19302".into(),
-            "stun:stun.cloudflare.com:3478".into(),
-        ],
-        ..Default::default()
-    };
+    let ice_config = default_ice_config();
     let (socket, message_loop) = WebRtcSocketBuilder::new(&room_url)
         .add_channel(ChannelConfig::unreliable())
         .ice_server(ice_config)

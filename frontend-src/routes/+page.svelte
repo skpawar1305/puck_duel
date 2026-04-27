@@ -111,7 +111,7 @@
       // direct UDP connect; port 8080 is assumed
       await invoke("connect_udp_client", { hostIp: peerIp });
       screen = "game";
-    } catch (e: any) {
+    } catch (e: unknown) {
       connectingPeer = null;
       alert("Failed to connect: " + e);
     }
@@ -150,7 +150,7 @@
       hostedRoomId = 'dummy-' + code;
       onlineConnecting = false;
       console.log('[Online Host] State updated, roomCode:', roomCode);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[Online Host] Error:', e);
       invalidateOnlineAttempt();
       failOnlineAttemptWithNetworkMessage();
@@ -182,7 +182,7 @@
       await invoke("join_online", { roomCode: joinCode.trim() });
       // peer-connected event will be emitted when connection established
       // No need to delete room (matchbox handles cleanup)
-    } catch (e: any) {
+    } catch (e: unknown) {
       invalidateOnlineAttempt();
       failOnlineAttemptWithNetworkMessage();
     }
@@ -297,7 +297,7 @@
         class="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-500 text-white rounded-2xl text-lg font-bold hover:from-purple-500 hover:to-purple-400 active:scale-95 shadow-[0_0_32px_rgba(147,51,234,0.5)] transition-all uppercase tracking-widest border border-purple-400/30"
         onclick={startSinglePlayer}
       >🤖 vs AI</button>
-      
+
       <p class="text-neutral-600 text-xs text-center mt-2 font-medium">💡 For best experience, use 5 GHz Wi-Fi</p>
     </div>
 
@@ -330,6 +330,7 @@
         class="w-full py-3 bg-neutral-700/50 text-white rounded-xl hover:bg-neutral-600/50 backdrop-blur-sm font-medium transition-all"
         onclick={async () => { await cancelOnlineSession(); useUdp = false; isHost = false; screen = "menu"; }}
       >Cancel</button>
+      <p class="text-neutral-600 text-xs text-center font-medium">💡 For best experience, use 5 GHz Wi-Fi</p>
     </div>
 
   {:else if screen === "join"}

@@ -5,6 +5,7 @@ use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tauri::{AppHandle, State, Emitter};
+use crate::config::network;
 
 /// Simple state for the raw-UDP transport used in LAN games.
 ///
@@ -25,7 +26,7 @@ pub struct UdpState {
 
 impl UdpState {
     pub fn new() -> Self {
-        let (msg_tx, _) = tokio::sync::broadcast::channel(64);
+        let (msg_tx, _) = tokio::sync::broadcast::channel(network::MSG_CHANNEL_CAPACITY);
         Self {
             socket: Arc::new(Mutex::new(None)),
             peer: Arc::new(Mutex::new(None)),
