@@ -1364,12 +1364,7 @@
       await app.init({
         width: pxW,
         height: pxH,
-        resolution: 1,
-        autoDensity: false,
         backgroundColor: 0x060b14,
-        antialias: true,
-        powerPreference: "high-performance",
-        preference: "webgl",
       });
     } catch (e) {
       pixiInitError = "Pixi init failed: " + String(e);
