@@ -243,6 +243,7 @@ async fn run_split_auth_game(
 
     let mut gs = GameState::new();
     let mut opp_ptr = [TABLE_WIDTH / 2.0, 120.0];
+    let mut was_authoritative = is_host;
     let dt = 1.0 / 60.0;
     let mut ai_opponent = [TABLE_WIDTH / 2.0, 120.0];
 
@@ -288,14 +289,27 @@ async fn run_split_auth_game(
             opp_ptr = ai_opponent;
         }
 
-        // Authority check
+        // Authority check with hysteresis to prevent rapid flipping at midline
         let puck_in_my_half = if is_single_player {
             true
         } else if is_host {
-            gs.puck.y >= TABLE_HEIGHT / 2.0
+            if gs.puck.y >= TABLE_HEIGHT / 2.0 + AUTH_HYSTERESIS {
+                true
+            } else if gs.puck.y <= TABLE_HEIGHT / 2.0 - AUTH_HYSTERESIS {
+                false
+            } else {
+                was_authoritative
+            }
         } else {
-            gs.puck.y <= TABLE_HEIGHT / 2.0
+            if gs.puck.y <= TABLE_HEIGHT / 2.0 - AUTH_HYSTERESIS {
+                true
+            } else if gs.puck.y >= TABLE_HEIGHT / 2.0 + AUTH_HYSTERESIS {
+                false
+            } else {
+                was_authoritative
+            }
         };
+        was_authoritative = puck_in_my_half;
 
         if puck_in_my_half {
             // server_update takes (host_ptr, client_ptr) — host is always host player
@@ -320,7 +334,8 @@ async fn run_split_auth_game(
         } else if let Some(state) = received_state {
             gs.puck.x = state.puck[0];
             gs.puck.y = state.puck[1];
-            gs.puck.vx = state.puck_speed * 0.5 * gs.puck.vx.signum().max(0.01);
+            gs.puck.vx = state.puck_vx;
+            gs.puck.vy = state.puck_vy;
             gs.score = state.score;
             if channel.send(state).is_err() { return; }
             if gs.score[0] >= WINNING_SCORE || gs.score[1] >= WINNING_SCORE {

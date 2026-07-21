@@ -23,6 +23,9 @@ bun run tauri android build -- --apk
 
 # Rust unit tests (config sanity checks)
 cd src-tauri && cargo test
+
+# Core lib tests only (faster, no system deps)
+cd puckduel-core && cargo test
 ```
 
 ## Architecture
@@ -89,6 +92,8 @@ frontend-src/        # SvelteKit frontend (routes, components)
   - Runs `server_update(dt, my_paddle, opp_paddle)`
   - Sends completed `RenderState` to opponent via `b'S'` packets
 - Non-authoritative player receives opponent's `RenderState` and renders it
+- Authority uses **hysteresis** (`AUTH_HYSTERESIS=12px` band around midline) with `was_authoritative` tracking — prevents rapid flipping when puck hovers near center
+- `RenderState` carries `puck_vx`/`puck_vy` so velocity is preserved across authority handoff
 - Solo/AI: always authoritative, AI runs locally via simple follow-puck logic
 
 ### Tauri IPC

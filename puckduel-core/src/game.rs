@@ -13,6 +13,8 @@ pub const CR: f32 = CORNER_RADIUS;
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RenderState {
     pub puck:          [f32; 2],
+    pub puck_vx:       f32,
+    pub puck_vy:       f32,
     pub puck_speed:    f32,
     pub host_paddle:   [f32; 2],
     pub client_paddle: [f32; 2],
@@ -190,6 +192,8 @@ impl GameState {
     pub fn to_render(&self) -> RenderState {
         RenderState {
             puck:          [self.puck.x, self.puck.y],
+            puck_vx:       self.puck.vx,
+            puck_vy:       self.puck.vy,
             puck_speed:    self.puck.speed(),
             host_paddle:   [self.host_paddle.x, self.host_paddle.y],
             client_paddle: [self.client_paddle.x, self.client_paddle.y],

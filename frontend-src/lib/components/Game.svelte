@@ -92,6 +92,8 @@
 
   interface RS {
     puck: [number, number];
+    puck_vx: number;
+    puck_vy: number;
     puck_speed: number;
     host_paddle: [number, number];
     client_paddle: [number, number];
@@ -108,6 +110,8 @@
 
   let rs = $state<RS>({
     puck: [TW / 2, TH / 2],
+    puck_vx: 0,
+    puck_vy: 0,
     puck_speed: 0,
     host_paddle: [TW / 2, TH - 120],
     client_paddle: [TW / 2, 120],
@@ -1318,6 +1322,8 @@
     nearMissCooldown = 0;
     rs = {
       puck: [TW / 2, TH / 2],
+      puck_vx: 0,
+      puck_vy: 0,
       puck_speed: 0,
       host_paddle: [TW / 2, TH - 120],
       client_paddle: [TW / 2, 120],
