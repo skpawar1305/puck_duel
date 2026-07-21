@@ -175,7 +175,12 @@ async fn handle_command(socket: &Arc<UdpSocket>, rooms: &ClientMap, cmd: String,
 
 async fn handle_input(rooms: &ClientMap, room_id: &str, src: SocketAddr, input: [f32; 2]) {
     let mut guard = rooms.lock().await;
-    if let Some(room) = guard.get_mut(room_id) {
+    let room = if room_id.is_empty() {
+        guard.values_mut().find(|r| r.creator == src || r.joiner == Some(src))
+    } else {
+        guard.get_mut(room_id)
+    };
+    if let Some(room) = room {
         if let Some(ref mut game) = room.game {
             let clamped = [input[0].clamp(PAD_R, TABLE_W - PAD_R), input[1]];
             if src == room.creator {
@@ -325,7 +330,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Binary input: room_id_len (1 byte) + room_id (N bytes) + paddle_x (4) + paddle_y (4)
         if data.len() >= 9 {
             let id_len = data[0] as usize;
-            if id_len > 0 && id_len <= 32 && data.len() >= 1 + id_len + 8 {
+            if id_len <= 32 && data.len() >= 1 + id_len + 8 {
                 if let Ok(room_id) = String::from_utf8(data[1..1+id_len].to_vec()) {
                     let px = f32::from_le_bytes([
                         data[1+id_len], data[2+id_len], data[3+id_len], data[4+id_len]
