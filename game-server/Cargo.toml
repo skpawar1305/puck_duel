@@ -1,0 +1,12 @@
+[package]
+name = "game-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.49.0", features = ["net", "sync", "time", "rt", "rt-multi-thread", "macros"] }
+puckduel-core = { path = "../puckduel-core" }
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+rand = "0.8"
+log = "0.4"

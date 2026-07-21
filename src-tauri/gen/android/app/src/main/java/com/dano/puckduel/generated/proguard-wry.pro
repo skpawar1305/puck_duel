@@ -13,7 +13,9 @@
 
   void setWebView(com.dano.puckduel.RustWebView);
   java.lang.Class getAppClass(...);
+  int getId();
   java.lang.String getVersion();
+  int startActivity(...);
 }
 
 -keep class com.dano.puckduel.Ipc {

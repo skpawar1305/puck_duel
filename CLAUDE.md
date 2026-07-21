@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Commands
 
 ```bash
@@ -13,76 +11,76 @@ npm run dev
 
 # Type-check Svelte/TypeScript
 npm run check
-npm run check:watch
 
 # Build frontend only
 npm run build
-
-# Bundle desktop app
-npm run tauri build
 
 # Build Android AAB (Play Store)
 npm run tauri android build
 
 # Build Android APK (sideload)
 npm run tauri android build -- --apk
-```
 
-There is no JavaScript/Svelte test suite. Rust unit tests (physics constants, config sanity checks) live in `src-tauri/src/config.rs`:
-
-```bash
+# Rust unit tests (config sanity checks)
 cd src-tauri && cargo test
 ```
 
 ## Architecture
 
-PuckDuel is a P2P multiplayer air hockey game for Android/desktop built with:
-- **Tauri 2** (Rust backend) + **SvelteKit** (Svelte 5, SPA mode) + **TypeScript**
-- **Tailwind CSS v4**
+PuckDuel is a **client-server** air hockey game for Android/desktop. A game server runs on a Lightsail VPS in Mumbai (`13.232.227.123:9876` UDP). Clients connect to it — no P2P, no NAT issues.
 
-SvelteKit uses `adapter-static` in SPA mode (`fallback: "index.html"`) — required for Tauri (no SSR).
+Stack: **Tauri 2** (Rust backend) + **SvelteKit** (Svelte 5, SPA mode) + **TypeScript** + **Tailwind CSS v4** + **Pixi.js 8** (canvas rendering).
 
-### Frontend (`src/`)
+### Workspace structure
 
-- `src/routes/+page.svelte` — single SvelteKit route; manages screens (`menu | host | join | game`) and invokes Tauri commands
-- `src/lib/components/Game.svelte` — main game canvas renderer (draws RenderState from Rust at 60 Hz via Tauri Channel)
-- `src/lib/components/QRScanner.svelte` — wraps `html5-qrcode` for scanning host IP/room QR codes
-- `src/lib/matchbox.ts` — WebRTC/matchbox state management for online multiplayer
-- `src/lib/audio.ts` — Web Audio API synth; must call `initAudio()` from a user-gesture handler before playing sounds
+```
+puckduel-core/       # Shared library: physics, GameState, RenderState, config
+game-server/         # Standalone binary running on Lightsail (UDP, port 9876)
+src-tauri/           # Tauri app (client): connects to game server
+frontend-src/        # SvelteKit frontend (routes, components)
+```
+
+### Frontend (`frontend-src/`)
+
+- `routes/+page.svelte` — single route; screens: `menu | game | online_join`
+- `lib/components/Game.svelte` — Pixi.js canvas renderer; receives `RenderState` at 60Hz via Tauri Channel
+- `lib/audio.ts` — Web Audio API synth; call `initAudio()` from a user-gesture handler
 
 ### Rust backend (`src-tauri/src/`)
 
-- `game.rs` — core game state machine; runs a tokio 60 Hz loop, emits `RenderState` to `Game.svelte` via Tauri Channel; exposes `start_game`, `stop_game`, `pause_game`, `resume_game`, `set_pointer`
-- `physics.rs` — collision detection for paddles, walls, corners, and goal posts; AI opponent logic
-- `config.rs` — all physics/gameplay constants (`TABLE_WIDTH`, `MAX_SPEED`, `FRICTION`, etc.) grouped into sub-modules `ai`, `network`, `interpolation`, `audio`; contains Rust unit tests; reads `MATCHBOX_SIGNALING_URL` from `src-tauri/.env` at compile time via `build.rs`
-- `transport.rs` — WebRTC P2P via `matchbox_socket`; exposes `host_online`, `join_online`, `reset_transport`, `get_room_id`, `cancel_online`
-- `udp_transport.rs` — LAN UDP transport + mDNS auto-discovery; exposes `start_udp_host`, `connect_udp_client`, `host_send_msg`, `client_send_msg`, `get_local_ips`, `start_discovery`, `stop_discovery`
-- `lib.rs` — Tauri builder, registers all commands and managed state (`WebRtcTransportState`, `GameEngine`, `UdpState`)
+- `game.rs` — Tauri commands: `create_room`, `join_room`, `create_solo`, `start_game`, `stop_game`, etc.
+- `config.rs`, `physics.rs` — re-exported from `puckduel-core`
 
-### Networking
+### Game server (`game-server/`)
 
-Two multiplayer modes:
-1. **LAN**: mDNS auto-discovery on same Wi-Fi, zero-config
-2. **Online**: WebRTC P2P over internet via matchbox signaling server (`MATCHBOX_SIGNALING_URL`); uses 4-digit room codes
+- UDP server listening on `[::]:9876` (dual-stack IPv4+IPv6)
+- Room management with 4-digit codes, 120s timeout, max 256 rooms
+- Authoritative physics at 60Hz, sends `RenderState` to both clients via bincode
+- AI opponent for solo mode
+- Rate limiting: max rooms, one host per IP, input clamping
 
-**Split authority model**: the side that "owns" the puck runs physics authoritatively; the other dead-reckons.
-- Host owns puck when `puck.y >= TABLE_HEIGHT/2`; client owns it on their half
-- Authority switches at the midline with an `AUTH_HYSTERESIS` band to prevent rapid flipping
-- On authority gain, the new owner blends in the last-received velocity to preserve momentum
+### Client-server protocol
+
+| Direction | Format | Description |
+|-----------|--------|-------------|
+| Client → Server | Text `CREATE` | Create a room |
+| Server → Client | Text `CREATED:XXXX` | Room code |
+| Client → Server | Text `JOIN:XXXX` | Join a room |
+| Server → Client | Text `JOINED` | Join accepted |
+| Server → Client (both) | Text `START` | Game started |
+| Client → Server (60Hz) | Binary: `room_id_len + room_id + paddle_x + paddle_y` | Player input |
+| Server → Client (60Hz) | Binary: `b'S' + bincode(RenderState)` | Game state |
+| Server → Client | Text `GAME_OVER` | Game ended |
 
 ### Tauri IPC
 
-- Frontend → Rust: `invoke(...)` from `@tauri-apps/api/core` (pointer input is fire-and-forget)
-- Rust → Frontend (render loop): Tauri `Channel` streams `RenderState` at 60 Hz — **not** Tauri events
-- Rust → Frontend (transport events): Tauri events via `listen(...)` from `@tauri-apps/api/event` (e.g. `peer-connected`, `udp-msg-received`)
+- Frontend → Rust: `invoke(...)` from `@tauri-apps/api/core`
+- Rust → Frontend (render loop): Tauri `Channel` streams `RenderState` at 60 Hz
 
 ## Key Conventions
 
-- **Svelte 5 runes only**: use `$state`, `$derived`, `$derived.by`, `$props`, `$effect` — not legacy `$:` reactive declarations or stores
-- **2D canvas rendering**: `Game.svelte` draws every frame using `CanvasRenderingContext2D` — there is no Three.js/Threlte/WebGL
-- **Physics constants live in `config.rs`**: tune gameplay by editing constants there, not inline in `game.rs` or `physics.rs`
-- **`src-tauri/.env`** must exist before building (copy from `.env.example`); sets `MATCHBOX_SIGNALING_URL` at compile time — runtime env vars are ignored
-- Positions in network messages send only `[x, z]` (y is fixed)
-- `release.keystore` is used for Android signing
-- `patch_scene.js` and `patch_scene_2.js` are one-off migration scripts — not part of the build
-- Android `minSdkVersion` is 28; app ID is `com.dano.puckduel`
+- **Svelte 5 runes only**: `$state`, `$derived`, `$props`, `$effect` — no legacy `$:` or stores
+- **Pixi.js 8** for canvas rendering
+- **Physics constants** live in `puckduel-core/src/config.rs`
+- **Keystore** at `src-tauri/keystore.zip` (password-protected), extracted to `release.keystore` + `keystore.properties` for signed builds
+- Android `minSdkVersion` is 28; app ID `com.dano.puckduel`

@@ -1,7 +1,9 @@
 fn main() {
     // Load src-tauri/.env into compile-time env vars so transport.rs can use env!()
     let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".env");
-    if env_path.exists() {
+    if !env_path.exists() {
+        println!("cargo:warning=src-tauri/.env not found — copy .env.example to .env to configure signaling & TURN URLs");
+    } else {
         let content = std::fs::read_to_string(&env_path)
             .expect("Failed to read src-tauri/.env");
         for line in content.lines() {

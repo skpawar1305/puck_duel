@@ -1,15 +1,43 @@
 .DS_Store
 release.keystore
 keystore.properties
-node_modules
-/build
-/.svelte-kit
-/package
+src-tauri/keystore.zip
+src-tauri/upload_certificate.pem
+src-tauri/upload-reset.keystore
+
+# Secrets
 .env
 .env.*
 !.env.example
+
+# Dependencies
+node_modules
+bun.lock
+
+# Build output
+/build
+/package
+/.svelte-kit
+target
+src-tauri/target
+
+# Android generated code
+src-tauri/gen/android/app/src/main/java/com/dano/puckduel/generated/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/app/src/main/jniLibs/
+src-tauri/gen/android/.gradle/
+*.signed.aab
+*.signed.apk
+src-tauri/gen/android/app/build/outputs/apk/
+src-tauri/gen/android/app/build/outputs/bundle/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Timestamps
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-src-tauri/upload_certificate.pem
-src-tauri/keystore.properties
-src-tauri/upload-reset.keystore

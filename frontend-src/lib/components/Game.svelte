@@ -28,15 +28,16 @@
   let {
     isHost,
     isSinglePlayer = false,
-    useUdp = false,
+    roomCode = "",
     onBack,
   } = $props<{
     isHost: boolean;
     isSinglePlayer?: boolean;
-    useUdp?: boolean;
+    roomCode?: string;
     onBack?: () => void;
   }>();
 
+  let waitingForOpponent = $state(!!roomCode);
   const WINNING_SCORE = 6;
 
   const AD_UNIT_ID = "ca-app-pub-7224112237798955/1828655479";
@@ -100,7 +101,7 @@
     wall_hit: number;
     goal_scored: number;
     countdown: number;
-    version_mismatch: boolean;
+    game_over: boolean;
   }
 
   let rs = $state<RS>({
@@ -116,7 +117,7 @@
     wall_hit: 0,
     goal_scored: 0,
     countdown: 3,
-    version_mismatch: false,
+    game_over: false,
   });
 
   let gameOver = $state(false);
@@ -1151,7 +1152,7 @@
     if (pendingPtr) {
       const [x, y] = pendingPtr;
       pendingPtr = null;
-      invoke("set_pointer", { x, y }).catch(() => {});
+      invoke("set_pointer", { x, y }).catch(e => console.warn(e));
     }
 
     const now = performance.now();
@@ -1326,34 +1327,25 @@
       wall_hit: 0,
       goal_scored: 0,
       countdown: 3,
-      version_mismatch: false,
+      game_over: false,
     };
 
     const ch = new Channel<RS>();
     ch.onmessage = (state) => {
-      if (state.version_mismatch && !gameOver) {
-        gameOver = true;
-        invoke("stop_game").catch(() => {});
-        alert(
-          "Version mismatch! Both players must be on the same app version.",
-        );
-        onBack?.();
-        return;
+      if (waitingForOpponent && state.countdown > 0) {
+        waitingForOpponent = false;
       }
-      handleAudio(state);
-      rs = state;
-      if (
-        !gameOver &&
-        (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)
-      ) {
+      if (state.game_over && !gameOver) {
         gameOver = true;
         const myIdx = isHost ? 0 : 1;
         iWon = state.score[myIdx] >= WINNING_SCORE;
-        invoke("stop_game").catch(() => {});
+        invoke("stop_game").catch(e => console.warn(e));
         showAd();
       }
+      handleAudio(state);
+      rs = state;
     };
-    await invoke("start_game", { isHost, isSinglePlayer, channel: ch, useUdp });
+    await invoke("start_game", { isHost, isSinglePlayer, channel: ch });
   }
 
   onMount(async () => {
@@ -1531,8 +1523,8 @@
     window.addEventListener("resize", onResize);
 
     onVisibility = () => {
-      if (document.hidden) invoke("pause_game").catch(() => {});
-      else invoke("resume_game").catch(() => {});
+      if (document.hidden) invoke("pause_game").catch(e => console.warn(e));
+      else invoke("resume_game").catch(e => console.warn(e));
     };
     document.addEventListener("visibilitychange", onVisibility);
 
@@ -1540,37 +1532,24 @@
 
     const ch = new Channel<RS>();
     ch.onmessage = (state) => {
-      if (state.version_mismatch && !gameOver) {
-        gameOver = true;
-        invoke("stop_game").catch(() => {});
-        alert(
-          "Version mismatch! Both players must be on the same app version.",
-        );
-        onBack?.();
-        return;
-      }
-      handleAudio(state);
-      rs = state;
-      if (
-        !gameOver &&
-        (state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE)
-      ) {
+      if (state.game_over && !gameOver) {
         gameOver = true;
         const myIdx = isHost ? 0 : 1;
         iWon = state.score[myIdx] >= WINNING_SCORE;
-        invoke("stop_game").catch(() => {});
+        invoke("stop_game").catch(e => console.warn(e));
         showAd();
       }
+      handleAudio(state);
+      rs = state;
     };
 
-    await invoke("stop_game").catch(() => {});
+    await invoke("stop_game").catch(e => console.warn(e));
 
     try {
       await invoke("start_game", {
         isHost,
         isSinglePlayer,
         channel: ch,
-        useUdp,
       });
     } catch (e) {
       console.error("start_game failed:", e);
@@ -1597,7 +1576,7 @@
       app = null;
     }
 
-    await invoke("stop_game").catch(() => {});
+    await invoke("stop_game").catch(e => console.warn(e));
   });
 </script>
 
@@ -1606,6 +1585,23 @@
   class="touch-none block"
   style="width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; background: radial-gradient(circle at 50% 35%, #0d1f3d 0%, #050d1d 58%, #030814 100%);"
 ></div>
+
+{#if waitingForOpponent}
+  <div class="fixed inset-0 flex flex-col items-center justify-center z-10 bg-black/70 backdrop-blur-sm">
+    <div class="flex flex-col items-center gap-6 p-10 rounded-[2.5rem] bg-gradient-to-br from-neutral-900/95 to-neutral-800/90 border border-orange-500/30 shadow-[0_0_60px_rgba(234,88,12,0.3)]">
+      <div class="text-6xl animate-bounce">🎯</div>
+      <h2 class="text-3xl font-black text-orange-400 drop-shadow-lg">Waiting for opponent</h2>
+      <p class="text-neutral-400 text-sm">Share this code:</p>
+      <div class="bg-gradient-to-br from-orange-500/20 to-orange-600/10 border-2 border-orange-500/40 rounded-3xl px-8 py-4 shadow-[0_0_40px_rgba(249,115,22,0.3)]">
+        <p class="text-6xl font-black tracking-widest text-orange-400 font-mono drop-shadow-lg">{roomCode}</p>
+      </div>
+      <div class="flex items-center gap-2 text-orange-400 text-sm font-semibold animate-pulse">
+        <span class="w-2 h-2 bg-orange-400 rounded-full animate-ping"></span>
+        Game starts automatically when someone joins
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if gameOver}
   <div
@@ -1657,7 +1653,7 @@
   <button
     class="fixed top-4 left-4 z-10 w-11 h-11 bg-black/50 text-white/70 rounded-full text-xl flex items-center justify-center active:scale-90 hover:text-white hover:bg-black/70 backdrop-blur-sm border border-white/10 shadow-lg transition-all"
     onclick={() => {
-      invoke("stop_game").catch(() => {});
+      invoke("stop_game").catch(e => console.warn(e));
       onBack?.();
     }}>✕</button
   >
