@@ -5,7 +5,7 @@ use tauri::ipc::Channel;
 use tauri::State;
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex as TokioMutex;
-use puckduel_core::game::RenderState;
+use puckduel_core::game::{RenderState, GameState};
 use puckduel_core::config::*;
 
 /// Tauri-managed state for the game loop (pointer, running flag, etc.)
@@ -144,8 +144,141 @@ pub async fn wait_for_opponent(server: State<'_, ServerState>) -> Result<(), Str
     Ok(())
 }
 
-/// Start the game loop: receives state from server, sends input, pushes to JS.
-/// `start_received` should be true when START was already consumed (by wait_for_opponent or create_solo).
+/// Each player runs this loop. The player in whose half the puck resides
+/// is authoritative for physics and sends the full RenderState. The other
+/// player receives that state and renders it.
+async fn run_split_auth_game(
+    sock: Arc<UdpSocket>,
+    running: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
+    pointer: Arc<Mutex<[f32; 2]>>,
+    channel: Channel<RenderState>,
+    is_host: bool,
+    is_single_player: bool,
+) {
+    use puckduel_core::config::{TABLE_HEIGHT, WINNING_SCORE};
+
+    let mut gs = GameState::new();
+    let mut opp_ptr = [TABLE_WIDTH / 2.0, 120.0];
+    let dt = 1.0 / 60.0;
+    let mut ai_opponent = [TABLE_WIDTH / 2.0, 120.0];
+
+    let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    while running.load(Ordering::Relaxed) {
+        interval.tick().await;
+
+        if paused.load(Ordering::Relaxed) {
+            continue;
+        }
+
+        let my_ptr = *pointer.lock().unwrap();
+
+        // Send my paddle to opponent (via relay server)
+        {
+            let mut out = Vec::with_capacity(9);
+            out.push(b'I');
+            out.extend_from_slice(&my_ptr[0].to_le_bytes());
+            out.extend_from_slice(&my_ptr[1].to_le_bytes());
+            let _ = sock.send(&out).await;
+        }
+
+        // Drain socket: opponent paddle + authoritative state
+        let mut received_state: Option<RenderState> = None;
+        loop {
+            let mut buf = [0u8; 2048];
+            match sock.try_recv(&mut buf) {
+                Ok(n) if n > 0 && buf[0] == b'I' && n >= 9 => {
+                    let px = f32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
+                    let py = f32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
+                    if px.is_finite() && py.is_finite() {
+                        opp_ptr = [px.clamp(PADDLE_RADIUS, TABLE_WIDTH - PADDLE_RADIUS), py];
+                    }
+                }
+                Ok(n) if n > 0 && buf[0] == b'S' => {
+                    if let Ok(state) = bincode::deserialize(&buf[1..n]) {
+                        received_state = Some(state);
+                    }
+                }
+                Ok(n) if n > 0 => {
+                    let txt = String::from_utf8_lossy(&buf[..n]);
+                    if txt.trim() == "GAME_OVER" {
+                        running.store(false, Ordering::Relaxed);
+                        return;
+                    }
+                }
+                _ => break,
+            }
+        }
+
+        // AI opponent for single player
+        if is_single_player {
+            let p = &gs.puck;
+            if p.y < TABLE_HEIGHT / 2.0 || (p.vy < -30.0 && p.y < TABLE_HEIGHT * 0.6) {
+                let ttr = if p.vy.abs() > 1.0 { ((p.y - 120.0) / p.vy).abs().min(0.5) } else { 0.3 };
+                let tx = (p.x + p.vx * ttr).clamp(PADDLE_RADIUS, TABLE_WIDTH - PADDLE_RADIUS);
+                let ty = (p.y - 40.0).clamp(PADDLE_RADIUS, TABLE_HEIGHT / 2.0 - PADDLE_RADIUS);
+                let err = ((p.x * 1.7 + p.y * 3.1) * 100.0).sin() * 12.0;
+                ai_opponent[0] += (tx + err - ai_opponent[0]).clamp(-8.0, 8.0);
+                ai_opponent[1] += (ty - ai_opponent[1]).clamp(-6.0, 6.0);
+            }
+            opp_ptr = ai_opponent;
+        }
+
+        // Am I authoritative? (puck in my half)
+        // Host owns bottom half (y > TH/2), joiner owns top half (y < TH/2)
+        let puck_in_my_half = if is_single_player {
+            true
+        } else if is_host {
+            gs.puck.y >= TABLE_HEIGHT / 2.0
+        } else {
+            gs.puck.y <= TABLE_HEIGHT / 2.0
+        };
+
+        if puck_in_my_half {
+            // I'm authoritative
+            gs.server_update(dt, my_ptr, opp_ptr);
+            let state = gs.to_render();
+
+            if channel.send(state.clone()).is_err() {
+                return;
+            }
+
+            // Send authoritative state to opponent
+            if let Ok(encoded) = bincode::serialize(&state) {
+                let mut out = Vec::with_capacity(1 + encoded.len());
+                out.push(b'S');
+                out.extend_from_slice(&encoded);
+                let _ = sock.send(&out).await;
+            }
+
+            if state.score[0] >= WINNING_SCORE || state.score[1] >= WINNING_SCORE {
+                let _ = sock.send(b"GAME_OVER").await;
+                running.store(false, Ordering::Relaxed);
+                return;
+            }
+        } else if let Some(state) = received_state {
+            // Opponent is authoritative: use their state
+            gs.puck.x = state.puck[0];
+            gs.puck.y = state.puck[1];
+            gs.puck.vx = state.puck_speed * 0.5 * gs.puck.vx.signum().max(0.01);
+            gs.score = state.score;
+
+            if channel.send(state).is_err() {
+                return;
+            }
+
+            if gs.score[0] >= WINNING_SCORE || gs.score[1] >= WINNING_SCORE {
+                running.store(false, Ordering::Relaxed);
+                return;
+            }
+        }
+    }
+}
+
+/// Start the game loop with split-authority: the player on whose side the puck
+/// resides runs physics and sends the authoritative state to the opponent.
 #[tauri::command]
 pub async fn start_game(
     engine: State<'_, GameEngine>,
@@ -155,7 +288,6 @@ pub async fn start_game(
     start_received: bool,
     channel: Channel<RenderState>,
 ) -> Result<(), String> {
-    // Abort any existing game
     {
         let old = engine.task.lock().unwrap().take();
         if let Some(h) = old { h.abort(); }
@@ -169,70 +301,11 @@ pub async fn start_game(
     let paused = engine.paused.clone();
     let pointer = engine.pointer.clone();
 
-    // Take the socket from server state
     let sock = server.socket.lock().await.take().ok_or("not connected to server")?;
-    let room_code = server.room_code.lock().await.take().unwrap_or_default();
+    let _room_code = server.room_code.lock().await.take().unwrap_or_default();
 
-    // Host needs to wait for START from server (unless already received via wait_for_opponent or create_solo)
     let handle = tokio::spawn(async move {
-        if is_host && !start_received {
-            let mut buf = [0u8; 64];
-            match tokio::time::timeout(Duration::from_secs(120), sock.recv(&mut buf)).await {
-                Ok(Ok(n)) => {
-                    let resp = String::from_utf8_lossy(&buf[..n]);
-                    if resp.trim() != "START" {
-                        return;
-                    }
-                }
-                _ => return,
-            }
-        }
-
-        // Encode room code prefix once
-        let rc_bytes = room_code.as_bytes();
-        let rc_len = rc_bytes.len() as u8;
-
-        let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        while running.load(Ordering::Relaxed) {
-            interval.tick().await;
-
-            if paused.load(Ordering::Relaxed) {
-                continue;
-            }
-
-            // Send paddle position to server
-            let ptr = *pointer.lock().unwrap();
-            let mut out = Vec::with_capacity(1 + rc_bytes.len() + 8);
-            out.push(rc_len);
-            out.extend_from_slice(rc_bytes);
-            out.extend_from_slice(&ptr[0].to_le_bytes());
-            out.extend_from_slice(&ptr[1].to_le_bytes());
-            let _ = sock.send(&out).await;
-
-            // Receive state from server (non-blocking, take latest)
-            loop {
-                let mut buf = [0u8; 1024];
-                match sock.try_recv(&mut buf) {
-                    Ok(n) if n > 0 && buf[0] == b'S' => {
-                        if let Ok(state) = bincode::deserialize(&buf[1..n]) {
-                            if channel.send(state).is_err() {
-                                return;
-                            }
-                        }
-                    }
-                    Ok(n) if n > 0 => {
-                        let txt = String::from_utf8_lossy(&buf[..n]);
-                        if txt.trim() == "GAME_OVER" {
-                            running.store(false, Ordering::Relaxed);
-                            return;
-                        }
-                    }
-                    _ => break,
-                }
-            }
-        }
+        run_split_auth_game(sock, running, paused, pointer, channel, is_host, is_single_player).await;
     });
 
     *engine.task.lock().unwrap() = Some(handle);
