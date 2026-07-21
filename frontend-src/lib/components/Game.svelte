@@ -1350,6 +1350,8 @@
     await invoke("start_game", { isHost, isSinglePlayer, startReceived, channel: ch });
   }
 
+  let pixiInitError = $state("");
+
   onMount(async () => {
     preloadAd();
 
@@ -1358,15 +1360,21 @@
     pxH = window.innerHeight * dpr;
 
     app = new Application();
-    await app.init({
-      width: pxW,
-      height: pxH,
-      resolution: 1,
-      autoDensity: false,
-      backgroundColor: 0x060b14,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    try {
+      await app.init({
+        width: pxW,
+        height: pxH,
+        resolution: 1,
+        autoDensity: false,
+        backgroundColor: 0x060b14,
+        antialias: true,
+        powerPreference: "high-performance",
+        preference: "webgl",
+      });
+    } catch (e) {
+      pixiInitError = "Pixi init failed: " + String(e);
+      return;
+    }
 
     app.canvas.style.width = window.innerWidth + "px";
     app.canvas.style.height = window.innerHeight + "px";
@@ -1591,6 +1599,15 @@
   class="touch-none block"
   style="width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; background: radial-gradient(circle at 50% 35%, #0d1f3d 0%, #050d1d 58%, #030814 100%);"
 ></div>
+
+{#if pixiInitError}
+  <div class="fixed inset-0 flex items-center justify-center z-20 bg-black/80">
+    <div class="text-white text-center p-8">
+      <p class="text-red-400 text-lg font-bold mb-2">Rendering Error</p>
+      <p class="text-neutral-400 text-sm">{pixiInitError}</p>
+    </div>
+  </div>
+{/if}
 
 {#if waitingForOpponent}
   <div class="fixed inset-0 flex flex-col items-center justify-center z-10 bg-black/70 backdrop-blur-sm">
