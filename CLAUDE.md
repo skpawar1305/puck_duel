@@ -99,7 +99,8 @@ frontend-src/        # SvelteKit frontend (routes, components)
 ## Key Conventions
 
 - **Svelte 5 runes only**: `$state`, `$derived`, `$props`, `$effect` — no legacy `$:` or stores
-- **Pixi.js 8** for canvas rendering
+- **Pixi.js 8** for canvas rendering; CSP must include `'unsafe-eval'` for WebGL shader compilation
 - **Physics constants** live in `puckduel-core/src/config.rs`
+- **Paddle velocity** is stored in px/s (pixels per second), divided by `dt` in `server_update`
 - **Keystore** at `src-tauri/keystore.zip` (password-protected), extracted to `release.keystore` + `keystore.properties` for signed builds
 - Android `minSdkVersion` is 28; app ID `com.dano.puckduel`
