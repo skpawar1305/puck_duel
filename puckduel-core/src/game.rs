@@ -91,16 +91,17 @@ impl GameState {
         let old_hy = self.host_paddle.y;
         self.host_paddle.x = host_ptr[0].clamp(PAR, TW - PAR);
         self.host_paddle.y = host_ptr[1].clamp(TH / 2.0 + PAR / 2.0, TH - PAR);
-        self.host_paddle.pvx = self.host_paddle.x - old_hx;
-        self.host_paddle.pvy = self.host_paddle.y - old_hy;
+        let inv_dt = if dt > 0.001 { 1.0 / dt } else { 60.0 };
+        self.host_paddle.pvx = (self.host_paddle.x - old_hx) * inv_dt;
+        self.host_paddle.pvy = (self.host_paddle.y - old_hy) * inv_dt;
 
         // Update client paddle (top)
         let old_cx = self.client_paddle.x;
         let old_cy = self.client_paddle.y;
         self.client_paddle.x = client_ptr[0].clamp(PAR, TW - PAR);
         self.client_paddle.y = client_ptr[1].clamp(PAR, TH / 2.0 - PAR / 2.0);
-        self.client_paddle.pvx = self.client_paddle.x - old_cx;
-        self.client_paddle.pvy = self.client_paddle.y - old_cy;
+        self.client_paddle.pvx = (self.client_paddle.x - old_cx) * inv_dt;
+        self.client_paddle.pvy = (self.client_paddle.y - old_cy) * inv_dt;
 
         // Physics substeps (120Hz)
         let substeps = 4;
