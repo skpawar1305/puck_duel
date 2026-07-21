@@ -79,10 +79,17 @@ async fn handle_command(socket: &Arc<UdpSocket>, rooms: &ClientMap, cmd: String,
             }
             room.joiner = Some(src);
             let host = room.creator;
+
+            // Tell each player the other's public address (for P2P hole-punching)
+            let host_peer = format!("PEER:{}:{}", src.ip(), src.port());
+            let join_peer = format!("PEER:{}:{}", host.ip(), host.port());
+            let _ = socket.send_to(host_peer.as_bytes(), host).await;
+            let _ = socket.send_to(join_peer.as_bytes(), src).await;
+
             let _ = socket.send_to(b"JOINED", src).await;
             let _ = socket.send_to(b"START", host).await;
             let _ = socket.send_to(b"START", src).await;
-            println!("Game started in room {}: {} vs {}", code, host, src);
+            println!("Game started in room {}: {} vs {} (P2P capable)", code, host, src);
             return;
         }
         let _ = socket.send_to(b"NOT_FOUND", src).await;
