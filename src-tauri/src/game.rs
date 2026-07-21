@@ -30,14 +30,12 @@ impl GameEngine {
 pub struct ServerState {
     pub socket: Arc<TokioMutex<Option<Arc<UdpSocket>>>>,
     pub room_code: Arc<TokioMutex<Option<String>>>,
-    pub cancel_wait: Arc<AtomicBool>,
 }
 impl ServerState {
     pub fn new() -> Self {
         Self {
             socket: Arc::new(TokioMutex::new(None)),
             room_code: Arc::new(TokioMutex::new(None)),
-            cancel_wait: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -129,17 +127,13 @@ pub async fn create_solo(server: State<'_, ServerState>, server_addr: String) ->
     }
 }
 
-/// Wait for opponent to join. Blocks until START received from server, then stores socket back.
+/// Wait for opponent to join. Blocks until START received from server.
 #[tauri::command]
 pub async fn wait_for_opponent(server: State<'_, ServerState>) -> Result<(), String> {
-    server.cancel_wait.store(false, Ordering::SeqCst);
     let sock = server.socket.lock().await.take().ok_or("not connected")?;
     let mut buf = [0u8; 64];
-    let result = tokio::time::timeout(Duration::from_secs(120), sock.recv(&mut buf)).await;
-    if server.cancel_wait.load(Ordering::SeqCst) {
-        return Err("cancelled".into());
-    }
-    let n = result
+    let n = tokio::time::timeout(Duration::from_secs(120), sock.recv(&mut buf))
+        .await
         .map_err(|_| "timeout waiting for opponent")?
         .map_err(|e| format!("recv: {}", e))?;
     let resp = String::from_utf8_lossy(&buf[..n]);
@@ -150,18 +144,15 @@ pub async fn wait_for_opponent(server: State<'_, ServerState>) -> Result<(), Str
     Ok(())
 }
 
-#[tauri::command]
-pub fn cancel_wait_for_opponent(server: State<'_, ServerState>) {
-    server.cancel_wait.store(true, Ordering::SeqCst);
-}
-
 /// Start the game loop: receives state from server, sends input, pushes to JS.
+/// `start_received` should be true when START was already consumed (by wait_for_opponent or create_solo).
 #[tauri::command]
 pub async fn start_game(
     engine: State<'_, GameEngine>,
     server: State<'_, ServerState>,
     is_host: bool,
     is_single_player: bool,
+    start_received: bool,
     channel: Channel<RenderState>,
 ) -> Result<(), String> {
     // Abort any existing game
@@ -182,9 +173,9 @@ pub async fn start_game(
     let sock = server.socket.lock().await.take().ok_or("not connected to server")?;
     let room_code = server.room_code.lock().await.take().unwrap_or_default();
 
-    // Host needs to wait for START from server (joiner already got it)
+    // Host needs to wait for START from server (unless already received via wait_for_opponent or create_solo)
     let handle = tokio::spawn(async move {
-        if is_host {
+        if is_host && !start_received {
             let mut buf = [0u8; 64];
             match tokio::time::timeout(Duration::from_secs(120), sock.recv(&mut buf)).await {
                 Ok(Ok(n)) => {

@@ -41,3 +41,6 @@ src-tauri/gen/android/app/build/outputs/bundle/
 # Timestamps
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Logs
+*.log

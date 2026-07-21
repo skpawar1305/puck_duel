@@ -28,11 +28,13 @@
   let {
     isHost,
     isSinglePlayer = false,
+    startReceived = false,
     roomCode = "",
     onBack,
   } = $props<{
     isHost: boolean;
     isSinglePlayer?: boolean;
+    startReceived?: boolean;
     roomCode?: string;
     onBack?: () => void;
   }>();
@@ -1345,7 +1347,7 @@
       handleAudio(state);
       rs = state;
     };
-    await invoke("start_game", { isHost, isSinglePlayer, channel: ch });
+    await invoke("start_game", { isHost, isSinglePlayer, startReceived, channel: ch });
   }
 
   onMount(async () => {
@@ -1532,6 +1534,9 @@
 
     const ch = new Channel<RS>();
     ch.onmessage = (state) => {
+      if (waitingForOpponent && state.countdown > 0) {
+        waitingForOpponent = false;
+      }
       if (state.game_over && !gameOver) {
         gameOver = true;
         const myIdx = isHost ? 0 : 1;
@@ -1549,6 +1554,7 @@
       await invoke("start_game", {
         isHost,
         isSinglePlayer,
+        startReceived,
         channel: ch,
       });
     } catch (e) {

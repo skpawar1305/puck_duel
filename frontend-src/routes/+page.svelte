@@ -13,11 +13,13 @@
   let joinCode = $state("");
   let connecting = $state(false);
   let error = $state("");
+  let startReceived = $state(false);
 
   async function startOnlineHost() {
     initAudio();
     isHost = true;
     isSinglePlayer = false;
+    startReceived = false;
     connecting = true;
     error = "";
     screen = "online_host";
@@ -27,6 +29,7 @@
       connecting = false;
       // Wait for opponent to join before transitioning to game
       await invoke("wait_for_opponent");
+      startReceived = true;
       screen = "game";
     } catch (e: unknown) {
       error = String(e);
@@ -60,6 +63,7 @@
     initAudio();
     isHost = true;
     isSinglePlayer = true;
+    startReceived = true;
     try {
       await invoke("create_solo", { serverAddr: SERVER_ADDR });
       screen = "game";
@@ -142,7 +146,7 @@
       {/if}
       <button
         class="w-full py-3 bg-neutral-700/50 text-white rounded-xl hover:bg-neutral-600/50 backdrop-blur-sm font-medium transition-all"
-        onclick={async () => { invoke("cancel_wait_for_opponent"); await cancelSession(); screen = "menu"; }}
+        onclick={async () => { await cancelSession(); screen = "menu"; }}
       >Cancel</button>
     </div>
 
@@ -181,10 +185,11 @@
 
   {:else if screen === "game"}
     <div class="absolute inset-0 w-full h-full">
-      <Game {isHost} {isSinglePlayer} roomCode={roomCode} onBack={() => {
+      <Game {isHost} {isSinglePlayer} {startReceived} roomCode={roomCode} onBack={() => {
         screen = "menu";
         isSinglePlayer = false;
         roomCode = "";
+        startReceived = false;
       }} />
     </div>
   {/if}
