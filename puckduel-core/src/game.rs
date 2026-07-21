@@ -103,7 +103,8 @@ impl GameState {
         self.client_paddle.pvx = (self.client_paddle.x - old_cx) * inv_dt;
         self.client_paddle.pvy = (self.client_paddle.y - old_cy) * inv_dt;
 
-        // Physics substeps (120Hz)
+        // Physics substeps (120Hz) — skip during countdown
+        if self.countdown <= 0.0 {
         let substeps = 4;
         let sub_dt = dt / (substeps as f32);
         for _ in 0..substeps {
@@ -150,6 +151,7 @@ impl GameState {
 
             clamp_max_speed(&mut self.puck);
         }
+        } // end countdown gate
 
         // Goal detection
         if self.countdown <= 0.0 {

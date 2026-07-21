@@ -298,7 +298,9 @@ async fn run_split_auth_game(
         };
 
         if puck_in_my_half {
-            gs.server_update(dt, my_ptr, opp_ptr);
+            // server_update takes (host_ptr, client_ptr) — host is always host player
+            let (h_ptr, c_ptr) = if is_host { (my_ptr, opp_ptr) } else { (opp_ptr, my_ptr) };
+            gs.server_update(dt, h_ptr, c_ptr);
             let state = gs.to_render();
 
             if channel.send(state.clone()).is_err() { return; }
